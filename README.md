@@ -14,7 +14,7 @@ Después abre `http://localhost:8765`. El mapa ya está incrustado y no requiere
 
 ## Publicación
 
-El sitio estático puede alojarse públicamente en GitHub Pages o en un proveedor equivalente con HTTPS. La base Supabase es compartida entre los usuarios. Antes de publicar en GitHub Pages, el repositorio debe tener visibilidad y configuración de Pages que permitan servir el sitio públicamente.
+El sitio público está en [https://karla02882.github.io/MAPAINTERACTIVO-HABITAT/](https://karla02882.github.io/MAPAINTERACTIVO-HABITAT/). Se publica con GitHub Pages y HTTPS desde la rama `main`; los cambios futuros en esa rama se despliegan automáticamente. El código fuente del repositorio también es público. La base Supabase es compartida entre los usuarios.
 
 ## Activar almacenamiento compartido
 
