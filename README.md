@@ -1,13 +1,52 @@
 # Proyectos inmobiliarios en Huancayo
 
-Aplicación web estática para explorar proyectos inmobiliarios de Huancayo y alrededores, con interfaz inspirada en iOS.
+Aplicación web estática para explorar 17 proyectos inmobiliarios de Huancayo y alrededores. Incluye una interfaz inspirada en iOS, filtros por tipo y estado, el mapa compartido de Google My Maps y fichas con galerías y documentos.
 
-## Uso
+## Desarrollo local
 
-Abre la carpeta desde un servidor web local. Por ejemplo, ejecuta `python -m http.server 8765` desde la carpeta y visita `http://localhost:8765`. El mapa de Google My Maps compartido está incrustado directamente en la página y no necesita una clave propia de Google Maps Platform.
+Para probar cambios antes de publicarlos, sirve la carpeta desde un servidor local:
 
-La lista contiene los 17 proyectos proporcionados. Selecciona un proyecto de la lista para abrir su ficha. Filtra por tipo o estado; estos filtros afectan la lista, no las capas del mapa incrustado. Administra los marcadores en el mapa compartido de Google My Maps.
+```powershell
+python -m http.server 8765
+```
 
-Desde cada ficha puedes **reemplazar toda la galería** por imágenes seleccionadas de tu dispositivo, o agregar archivos PDF por separado. Las imágenes nuevas reemplazan las ilustraciones de ejemplo y los PDF se añaden a los documentos existentes. Se guardan en IndexedDB y siguen disponibles en el mismo navegador y perfil después de recargar. No se envían a un servidor. Si el navegador no permite guardar, la aplicación muestra un aviso y deshabilita la carga.
+Después abre `http://localhost:8765`. El mapa ya está incrustado y no requiere una clave de Google Maps Platform. Los filtros afectan la lista de proyectos; las capas y marcadores se administran en el mapa de Google My Maps.
 
-Mientras no reemplaces la galería, aparecen ilustraciones de demostración. Las ubicaciones, proyectos y documentos también deben revisarse antes de publicar.
+## Publicación
+
+El sitio estático puede alojarse públicamente en GitHub Pages o en un proveedor equivalente con HTTPS. La base Supabase es compartida entre los usuarios. Antes de publicar en GitHub Pages, el repositorio debe tener visibilidad y configuración de Pages que permitan servir el sitio públicamente.
+
+## Activar almacenamiento compartido
+
+La aplicación utiliza Supabase Storage para los archivos y una tabla Postgres para sus metadatos. Las imágenes y los PDF son legibles públicamente para que puedan visualizarse en cualquier dispositivo. **No subas información confidencial o documentos privados.** Solo las cuentas administradoras autorizadas pueden cargar, reemplazar, cambiar portadas o eliminar archivos.
+
+1. Crea un proyecto en Supabase.
+2. En el SQL Editor de ese proyecto, ejecuta el contenido completo de [`supabase-setup.sql`](./supabase-setup.sql). El script crea las tablas, políticas, el bucket público `project-files` y los 17 proyectos.
+3. Los registros públicos están desactivados en este proyecto. Las cuentas administradoras autorizadas son `habitatbr2@gmail.com` y `72128731@continental.edu.pe`; invita a sus usuarios desde Authentication → Users y autorízalos en la tabla `project_admins`. La app no permite crear cuentas.
+4. Autoriza las cuentas ejecutando en el SQL Editor:
+
+   ```sql
+   insert into public.project_admins (user_id)
+   select id from auth.users
+   where lower(email) in ('habitatbr2@gmail.com', '72128731@continental.edu.pe')
+   on conflict (user_id) do nothing;
+   ```
+
+5. La Project URL y la clave pública `anon`/publishable ya están guardadas en [`supabase-config.js`](./supabase-config.js). Si cambias de proyecto, reemplázalas allí:
+
+   ```js
+   window.HABITAT_SUPABASE_URL = "https://tu-proyecto.supabase.co";
+   window.HABITAT_SUPABASE_ANON_KEY = "tu-clave-anon-publica";
+   window.HABITAT_SUPABASE_BUCKET = "project-files";
+   ```
+
+   **Nunca pongas una clave `service_role` en el navegador.** La clave `anon` es pública y las políticas RLS restringen las operaciones de escritura a las cuentas autorizadas.
+6. Inicia sesión con una cuenta autorizada y administra los archivos desde la ficha de cada proyecto.
+
+Si Supabase no está configurado o no se puede conectar, el catálogo y el mapa siguen visibles y la app muestra el estado del almacenamiento. Las imágenes admitidas son JPEG, PNG, WebP, GIF y AVIF, con un límite de 25 MB por archivo. Los PDF también tienen un límite de 25 MB.
+
+## Galería y portadas
+
+Las galerías se organizan en **Fachada** para departamentos, casas y oficinas; **Pórtico** para lotes y casas de campo; **Áreas comunes** para todos; y grupos separados por tipología en proyectos de departamentos. La primera imagen agregada a la categoría de portada se selecciona como imagen principal automáticamente. Esta misma imagen aparece en la ficha y como miniatura en la lista. Un administrador puede cambiarla desde la galería.
+
+La opción de reemplazar la galería elimina las imágenes anteriores del proyecto y las sustituye por la carga nueva. Los documentos PDF se administran por separado y no se eliminan al reemplazar imágenes.
