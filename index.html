@@ -496,8 +496,8 @@ function showRenameDialog(asset){
 }
 function galleryImageCard(project,asset){
  const primary=asset.is_primary,canBePrimary=asset.category===coverCategory(project)&&!primary;
- const showFileName=!(primary&&asset.category===coverCategory(project));
- return `<div class="gallery-card"><button class="gallery-image" type="button" data-view-asset="${html(asset.id)}" aria-label="Abrir ${html(asset.file_name)}"><img alt="${html(asset.file_name)}" src="${html(publicFileUrl(asset))}">${showFileName?`<span class="image-name">${html(asset.file_name)}</span>`:''}</button>${isProjectAdmin?`<div class="image-actions">${canBePrimary?`<button type="button" data-primary-asset="${html(asset.id)}">Usar como portada</button>`:''}<button type="button" data-rename-asset="${html(asset.id)}">Renombrar</button><button class="delete-asset" type="button" data-delete-asset="${html(asset.id)}" aria-label="Eliminar ${html(asset.file_name)}">Eliminar</button></div>`:''}</div>`;
+ const isCoverCategory=asset.category===coverCategory(project);
+ return `<div class="gallery-card"><button class="gallery-image${isCoverCategory?' cover-category-image':''}" type="button" data-view-asset="${html(asset.id)}" aria-label="Abrir ${html(asset.file_name)}"><img alt="${html(asset.file_name)}" src="${html(publicFileUrl(asset))}">${!isCoverCategory?`<span class="image-name">${html(asset.file_name)}</span>`:''}</button>${isProjectAdmin?`<div class="image-actions">${canBePrimary?`<button type="button" data-primary-asset="${html(asset.id)}">Usar como portada</button>`:''}<button type="button" data-rename-asset="${html(asset.id)}">Renombrar</button><button class="delete-asset" type="button" data-delete-asset="${html(asset.id)}" aria-label="Eliminar ${html(asset.file_name)}">Eliminar</button></div>`:''}</div>`;
 }
 function galleryMarkup(project){
  return groupAssets(project).map(group=>`<section class="gallery-category"><h4>${html(group.label)}</h4>${group.assets.length?`<div class="gal">${group.assets.map(asset=>galleryImageCard(project,asset)).join('')}</div>`:`<p class="empty-category">Aún no hay imágenes en esta categoría.</p>`}</section>`).join('');
