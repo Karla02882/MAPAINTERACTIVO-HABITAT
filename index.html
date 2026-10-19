@@ -98,9 +98,9 @@ h3{font-size:15px;margin:20px 0 8px}
 #modal iframe{width:min(860px,100%);height:100%;border:0;background:#fff;border-radius:8px}
 @media (max-width:760px){body{overflow:auto}main{flex:1;min-height:calc(100dvh - 94px);grid-template-columns:1fr;grid-template-rows:minmax(230px,35dvh) minmax(420px,1fr)}aside{border-right:0;border-bottom:1px solid var(--line);order:2;max-height:42dvh}#mapwrap{order:1}.item img{display:block}#drawer{width:min(440px,100%)}}
 @media (prefers-reduced-motion:reduce){#drawer{transition:none}}
-:root{--bg:#F2F2F7;--panel:rgba(255,255,255,.94);--ink:#1C1C1E;--mute:#8E8E93;--line:rgba(60,60,67,.16);--ok:#34C759;--pre:#FF3B30;--sold:#8E8E93;--sel:#007AFF;color-scheme:light;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#000;--panel:rgba(28,28,30,.96);--ink:#F5F5F7;--mute:#98989D;--line:rgba(84,84,88,.65);--ok:#30D158;--pre:#FF453A;--sold:#8E8E93;--sel:#0A84FF;color-scheme:dark}}
-:root[data-theme="dark"]{--bg:#000;--panel:rgba(28,28,30,.96);--ink:#F5F5F7;--mute:#98989D;--line:rgba(84,84,88,.65);--ok:#30D158;--pre:#FF453A;--sold:#8E8E93;--sel:#0A84FF;color-scheme:dark}
+:root{--bg:#F2F2F7;--panel:rgba(255,255,255,.94);--ink:#1C1C1E;--mute:#8E8E93;--line:rgba(60,60,67,.16);--ok:#34C759;--pre:#FF3B30;--build:#FF9500;--sold:#8E8E93;--sel:#007AFF;color-scheme:light;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#000;--panel:rgba(28,28,30,.96);--ink:#F5F5F7;--mute:#98989D;--line:rgba(84,84,88,.65);--ok:#30D158;--pre:#FF453A;--build:#FF9F0A;--sold:#8E8E93;--sel:#0A84FF;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#000;--panel:rgba(28,28,30,.96);--ink:#F5F5F7;--mute:#98989D;--line:rgba(84,84,88,.65);--ok:#30D158;--pre:#FF453A;--build:#FF9F0A;--sold:#8E8E93;--sel:#0A84FF;color-scheme:dark}
 body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Segoe UI",sans-serif;letter-spacing:-.015em}
 header{position:relative;z-index:2;align-items:center;padding:14px 22px;background:color-mix(in srgb,var(--panel) 84%,transparent);backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px)}
 h1{letter-spacing:-.035em;font-size:23px}header p{letter-spacing:-.01em}
@@ -208,7 +208,7 @@ function renderAll(){
  $('#list').innerHTML=shown.map(p=>{
   const cover=primaryImage(p);
   const thumbnail=cover?`<img alt="${html(cover.file_name)}" src="${html(publicFileUrl(cover))}">`:`<span class="thumbnail-placeholder">${html(coverCategory(p)==='portico'?'Pórtico':'Fachada')}</span>`;
-  return `<button class="item ${sel===p.id?'on':''}" data-i="${html(p.id)}">${thumbnail}<span class="item-summary"><b>${html(p.n)}</b><span class="item-meta">${html(p.d)} · ${html(p.pr||'Precio a consultar')}</span><span class="item-type">${html(p.t)}</span><span class="item-status"><i class="dot" style="background:${COL[p.s]}"></i>${html(p.s)}</span></span></button>`;
+  return `<button class="item ${sel===p.id?'on':''}" data-i="${html(p.id)}">${thumbnail}<span class="item-summary"><b>${html(p.n)}</b><span class="item-meta">${html(p.d)} · ${html(p.pr||'Precio a consultar')}</span><span class="item-type">${html(p.t)}</span><span class="item-status" style="color:${COL[p.s]}"><i class="dot" style="background:${COL[p.s]}"></i>${html(p.s)}</span></span></button>`;
  }).join('');
  document.querySelectorAll('[data-i]').forEach(e=>{e.onclick=()=>open(e.dataset.i);e.onkeydown=ev=>{if(ev.key=='Enter'||ev.key==' '){ev.preventDefault();open(e.dataset.i)}}});
 }
@@ -509,7 +509,7 @@ function drawer(){
  const pdfs=assets.filter(asset=>asset.category==='documento');
  const categories=uploadCategories(p),cover=primaryImage(p);
  const coverMarkup=cover?`<button class="project-cover" type="button" data-view-asset="${html(cover.id)}"><img src="${html(publicFileUrl(cover))}" alt="${html(cover.file_name)}"><span>${html(categoryName(cover.category))}</span></button>`:'';
- dr.innerHTML=`<button class="close" id="x" type="button">Cerrar</button>${coverMarkup}<h2>${html(p.n)}</h2><div style="color:var(--mute)"><i class="dot" style="background:${COL[p.s]}"></i>${html(p.s)} · ${html(p.d)}</div><p class="project-location">${html(p.loc)}</p>
+ dr.innerHTML=`<button class="close" id="x" type="button">Cerrar</button>${coverMarkup}<h2>${html(p.n)}</h2><div style="color:var(--mute)"><i class="dot" style="background:${COL[p.s]}"></i><span style="color:${COL[p.s]}">${html(p.s)}</span> · ${html(p.d)}</div><p class="project-location">${html(p.loc)}</p>
  <div class="facts"><div><small>Tipo</small><b>${html(p.t)}</b></div><div><small>Estado</small><b>${html(p.s)}</b></div><div><small>Precio</small><b>${html(p.pr||'Consultar')}</b></div><div><small>Área</small><b>${html(p.a)}</b></div></div>
  <h3>Galería</h3>${galleryMarkup(p)}
  ${pdfs.length?`<h3>Documentos</h3><div class="docs">${pdfs.map(asset=>`<div class="document-row"><button type="button" data-view-asset="${html(asset.id)}"><span class="tag">PDF</span>${html(asset.file_name)}</button>${isProjectAdmin?`<button class="delete-asset" type="button" data-delete-asset="${html(asset.id)}" aria-label="Eliminar ${html(asset.file_name)}">×</button>`:''}</div>`).join('')}</div>`:''}
