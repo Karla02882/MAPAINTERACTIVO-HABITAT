@@ -56,6 +56,8 @@ h3{font-size:15px;margin:20px 0 8px}
 .gal button.gallery-image{width:100%;padding:0;border:0;background:none;cursor:pointer;position:relative;overflow:hidden}
 .gal img{width:100%;aspect-ratio:3/2;object-fit:cover;display:block}
 .gal span{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(transparent,#000a);color:#fff;font-size:12px;padding:14px 8px 5px;text-align:left}
+.gal button .cover-badge{right:auto;bottom:auto;left:7px}
+.gal button .image-name{left:0;right:0;bottom:0}
 .cover-badge{position:absolute;top:7px;left:7px;padding:4px 7px;border-radius:999px;background:#007AFF;color:white;font-size:10px;font-weight:700}
 .image-actions{display:flex;gap:6px;padding:6px}
 .image-actions button{flex:1;padding:6px 7px;border:0;border-radius:999px;background:color-mix(in srgb,var(--sel) 10%,var(--panel));color:var(--sel);font:inherit;font-size:10px;font-weight:600;cursor:pointer}
@@ -125,8 +127,6 @@ aside{background:var(--panel);backdrop-filter:blur(18px);-webkit-backdrop-filter
 .facts div{border-color:var(--line);border-radius:12px;padding:10px 12px;background:color-mix(in srgb,var(--bg) 65%,var(--panel))}
 .facts b{letter-spacing:-.02em}
 .gal{gap:10px}
-.gal button{border-radius:12px;background:var(--bg)}
-.gal img{border-radius:12px}
 .docs button{border-color:var(--line);border-radius:12px;padding:11px 12px;background:color-mix(in srgb,var(--panel) 86%,var(--bg));transition:transform .16s,background .16s}
 .tag{border-radius:6px;background:#FF3B30}
 .tag.image{background:#34C759}
@@ -137,6 +137,8 @@ aside{background:var(--panel);backdrop-filter:blur(18px);-webkit-backdrop-filter
 .project-location{line-height:1.5}
 #storage-status{border-radius:12px;background:#FFF3CD;color:#8A5A00}
 .storage-error{padding:10px 12px;border-radius:10px;background:#FFE5E5;color:#B42318;line-height:1.5}
+.item img,.item .thumbnail-placeholder,.project-cover,.project-cover img,.gallery-card,.gal button.gallery-image,.gal img,#modal img{border-radius:0!important;box-shadow:none!important}
+.gallery-card{border:0;background:none}
 #modal{background:rgba(0,0,0,.78);backdrop-filter:blur(15px);-webkit-backdrop-filter:blur(15px)}
 #modal .bar button,#modal .bar a{border-radius:999px;background:rgba(255,255,255,.17)}
 @media(max-width:760px){main{grid-template-columns:1fr;grid-template-rows:minmax(260px,38dvh) minmax(400px,1fr)}aside{max-height:none;border:0}.chips{padding:8px 12px}.chip{padding:6px 11px}.item{padding:10px 12px}#drawer{top:auto;left:0;right:0;bottom:0;width:100%;max-height:min(82dvh,760px);border:1px solid var(--line);border-bottom:0;border-radius:22px 22px 0 0;transform:translateY(102%);padding:22px 18px calc(22px + env(safe-area-inset-bottom,0px))}#drawer.open{transform:translateY(0)}.close{top:0}header{padding:12px 16px;align-items:flex-start}header p{font-size:12px}#account-area{width:100%;margin:0;justify-content:space-between}}
@@ -192,21 +194,6 @@ function primaryImage(project){
  return images.find(asset=>asset.is_primary)||images.find(asset=>asset.category===coverCategory(project))||null;
 }
 
-function makePDF(title,lines){
- const esc=s=>s.replace(/[\\()]/g,'\\$&');
- let c='BT /F1 22 Tf 56 770 Td ('+esc(title)+') Tj /F1 12 Tf';
- lines.forEach(l=>c+=' 0 -26 Td ('+esc(l)+') Tj');c+=' ET';
- const o=['<</Type/Catalog/Pages 2 0 R>>','<</Type/Pages/Kids[3 0 R]/Count 1>>','<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>','<</Length '+c.length+'>>stream\n'+c+'\nendstream','<</Type/Font/Subtype/Type1/BaseFont/Helvetica/Encoding/WinAnsiEncoding>>'];
- let s='%PDF-1.4\n',off=[];
- o.forEach((b,i)=>{off.push(s.length);s+=(i+1)+' 0 obj\n'+b+'\nendobj\n'});
- const x=s.length;
- s+='xref\n0 6\n0000000000 65535 f \n'+off.map(n=>String(n).padStart(10,'0')+' 00000 n \n').join('')+'trailer\n<</Size 6/Root 1 0 R>>\nstartxref\n'+x+'\n%%EOF';
- const u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i)&255;
- return new Blob([u],{type:'application/pdf'});
-}
-function docs(p){return[
- ['Ficha del proyecto',p.n+' - '+p.d,[p.t,p.a,p.pr||'Precio a consultar','Estado: '+p.s,'Ubicación: '+p.loc,'Documento de demostración.']]]}
-
 function renderChips(){
  const types=['Todos','Departamentos','Lotes','Casa de campo','Casas','Oficinas'];
  const statuses=['Todos','Ejecución','Anteproyecto','Sold Out'];
@@ -220,7 +207,7 @@ function renderAll(){
  const shown=vis();
  $('#list').innerHTML=shown.map(p=>{
   const cover=primaryImage(p);
-  const thumbnail=cover?`<img alt="${html(categoryName(cover.category))} de ${html(p.n)}" src="${html(publicFileUrl(cover))}">`:`<span class="thumbnail-placeholder">${html(coverCategory(p)==='portico'?'Pórtico':'Fachada')}</span>`;
+  const thumbnail=cover?`<img alt="${html(cover.file_name)}" src="${html(publicFileUrl(cover))}">`:`<span class="thumbnail-placeholder">${html(coverCategory(p)==='portico'?'Pórtico':'Fachada')}</span>`;
   return `<button class="item ${sel===p.id?'on':''}" data-i="${html(p.id)}">${thumbnail}<span class="item-summary"><b>${html(p.n)}</b><span class="item-meta">${html(p.d)} · ${html(p.pr||'Precio a consultar')}</span><span class="item-type">${html(p.t)}</span><span class="item-status"><i class="dot" style="background:${COL[p.s]}"></i>${html(p.s)}</span></span></button>`;
  }).join('');
  document.querySelectorAll('[data-i]').forEach(e=>{e.onclick=()=>open(e.dataset.i);e.onkeydown=ev=>{if(ev.key=='Enter'||ev.key==' '){ev.preventDefault();open(e.dataset.i)}}});
@@ -434,6 +421,17 @@ async function setPrimary(asset){
  if(error)throw new Error(`No se pudo cambiar la imagen principal: ${error.message}`);
  await refreshAssets();
 }
+async function renameImage(asset,newName){
+ if(!isProjectAdmin)throw new Error('Inicia sesión con una cuenta administradora para cambiar el nombre.');
+ const name=newName.trim();
+ if(!name)throw new Error('El nombre de la imagen no puede estar vacío.');
+ if(name.length>180)throw new Error('El nombre no puede superar los 180 caracteres.');
+ const {data,error}=await supabase.from('project_assets').update({file_name:name}).eq('id',asset.id).select('id').maybeSingle();
+ if(error)throw new Error(`No se pudo cambiar el nombre de la imagen: ${error.message}`);
+ if(!data)throw new Error('No se encontró la imagen o no tienes permiso para cambiar su nombre.');
+ try{await refreshAssets()}
+ catch(error){throw new Error(`El nombre se guardó, pero no se pudo actualizar la galería: ${error.message}`)}
+}
 async function deleteAsset(asset){
  if(!isProjectAdmin)throw new Error('Inicia sesión con una cuenta administradora para eliminar archivos.');
  const {error}=await supabase.from('project_assets').delete().eq('id',asset.id);
@@ -474,9 +472,31 @@ function showAuthDialog(message=''){
   }
  };
 }
+function showRenameDialog(asset){
+ const modal=$('#modal');
+ modal.innerHTML=`<form class="auth-card" id="rename-form"><h2>Renombrar imagen</h2><label>Nombre<input id="rename-input" type="text" maxlength="180" value="${html(asset.file_name)}" required></label><p id="rename-error" role="alert"></p><div class="auth-actions"><button class="secondary" id="rename-cancel" type="button">Cancelar</button><button type="submit">Guardar</button></div></form>`;
+ modal.classList.add('open');
+ $('#rename-input').focus();
+ $('#rename-input').select();
+ $('#rename-cancel').onclick=closeModal;
+ $('#rename-form').onsubmit=async event=>{
+  event.preventDefault();
+  const submit=event.currentTarget.querySelector('[type=submit]');
+  submit.disabled=true;
+  try{
+   await renameImage(asset,$('#rename-input').value);
+   closeModal();
+   setStorageMessage('Nombre de imagen actualizado.');
+   drawer();
+  }catch(error){
+   $('#rename-error').textContent=error.message;
+   submit.disabled=false;
+  }
+ };
+}
 function galleryImageCard(project,asset){
  const primary=asset.is_primary,canBePrimary=asset.category===coverCategory(project)&&!primary;
- return `<div class="gallery-card"><button class="gallery-image" type="button" data-view-asset="${html(asset.id)}" aria-label="Abrir ${html(asset.file_name)}"><img alt="${html(asset.category_label)}" src="${html(publicFileUrl(asset))}">${primary?`<span class="cover-badge">Imagen principal · ${html(categoryName(asset.category))}</span>`:`<span>${html(asset.category_label)}</span>`}</button>${isProjectAdmin?`<div class="image-actions">${canBePrimary?`<button type="button" data-primary-asset="${html(asset.id)}">Usar como portada</button>`:''}<button class="delete-asset" type="button" data-delete-asset="${html(asset.id)}" aria-label="Eliminar ${html(asset.file_name)}">Eliminar</button></div>`:''}</div>`;
+ return `<div class="gallery-card"><button class="gallery-image" type="button" data-view-asset="${html(asset.id)}" aria-label="Abrir ${html(asset.file_name)}"><img alt="${html(asset.file_name)}" src="${html(publicFileUrl(asset))}">${primary?`<span class="cover-badge">Imagen principal · ${html(categoryName(asset.category))}</span>`:''}<span class="image-name">${html(asset.file_name)}</span></button>${isProjectAdmin?`<div class="image-actions">${canBePrimary?`<button type="button" data-primary-asset="${html(asset.id)}">Usar como portada</button>`:''}<button type="button" data-rename-asset="${html(asset.id)}">Renombrar</button><button class="delete-asset" type="button" data-delete-asset="${html(asset.id)}" aria-label="Eliminar ${html(asset.file_name)}">Eliminar</button></div>`:''}</div>`;
 }
 function galleryMarkup(project){
  return groupAssets(project).map(group=>`<section class="gallery-category"><h4>${html(group.label)}</h4>${group.assets.length?`<div class="gal">${group.assets.map(asset=>galleryImageCard(project,asset)).join('')}</div>`:`<p class="empty-category">Aún no hay imágenes en esta categoría.</p>`}</section>`).join('');
@@ -487,19 +507,19 @@ function drawer(){
  const dr=$('#drawer'),assets=projectAssets(p.id);
  const pdfs=assets.filter(asset=>asset.category==='documento');
  const categories=uploadCategories(p),cover=primaryImage(p);
- const coverMarkup=cover?`<button class="project-cover" type="button" data-view-asset="${html(cover.id)}"><img src="${html(publicFileUrl(cover))}" alt="${html(categoryName(cover.category))} de ${html(p.n)}"><span>${html(categoryName(cover.category))} · Imagen principal</span></button>`:'';
+ const coverMarkup=cover?`<button class="project-cover" type="button" data-view-asset="${html(cover.id)}"><img src="${html(publicFileUrl(cover))}" alt="${html(cover.file_name)}"><span>${html(cover.file_name)} · Imagen principal</span></button>`:'';
  dr.innerHTML=`<button class="close" id="x" type="button">Cerrar</button>${coverMarkup}<h2>${html(p.n)}</h2><div style="color:var(--mute)"><i class="dot" style="background:${COL[p.s]}"></i>${html(p.s)} · ${html(p.d)}</div><p class="project-location">${html(p.loc)}</p>
  <div class="facts"><div><small>Tipo</small><b>${html(p.t)}</b></div><div><small>Estado</small><b>${html(p.s)}</b></div><div><small>Precio</small><b>${html(p.pr||'Consultar')}</b></div><div><small>Área</small><b>${html(p.a)}</b></div></div>
  <h3>Galería</h3>${galleryMarkup(p)}
- <h3>Documentos</h3><div class="docs">${docs(p).map(d=>`<button type="button" data-demo-pdf="${html(d[0])}"><span class="tag">PDF</span>${html(d[0])}</button>`).join('')}${pdfs.map(asset=>`<div class="document-row"><button type="button" data-view-asset="${html(asset.id)}"><span class="tag">PDF</span>${html(asset.file_name)}</button>${isProjectAdmin?`<button class="delete-asset" type="button" data-delete-asset="${html(asset.id)}" aria-label="Eliminar ${html(asset.file_name)}">×</button>`:''}</div>`).join('')}</div>
+ ${pdfs.length?`<h3>Documentos</h3><div class="docs">${pdfs.map(asset=>`<div class="document-row"><button type="button" data-view-asset="${html(asset.id)}"><span class="tag">PDF</span>${html(asset.file_name)}</button>${isProjectAdmin?`<button class="delete-asset" type="button" data-delete-asset="${html(asset.id)}" aria-label="Eliminar ${html(asset.file_name)}">×</button>`:''}</div>`).join('')}</div>`:''}
  ${isProjectAdmin?`<form class="upload-form" id="asset-upload-form">
  <strong>Administrar archivos</strong>
  <label>Categoría de imágenes<select id="image-category">${categories.map(category=>`<option value="${category.value}" ${category.value===coverCategory(p)?'selected':''}>${html(category.label)}</option>`).join('')}</select></label>
  ${p.t==='Departamentos'?`<label id="typology-wrap" hidden>Tipología<input id="typology-label" type="text" maxlength="80" placeholder="Ej. 2 dormitorios"></label>`:''}
- <label>Imágenes de la categoría<input id="gallery-upload" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" multiple></label>
+ <label>Imágenes de la categoría (puedes seleccionar varias)<input id="gallery-upload" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" multiple><span id="gallery-file-count" aria-live="polite"></span></label>
  <label class="replace-option"><input id="replace-gallery" type="checkbox">Reemplazar toda la galería de imágenes</label>
  <button class="upload-submit" type="submit">Guardar imágenes</button>
- <label>Agregar PDF<input id="pdf-upload" type="file" accept="application/pdf" multiple></label>
+ <label>Agregar PDF (puedes seleccionar varios)<input id="pdf-upload" type="file" accept="application/pdf" multiple><span id="pdf-file-count" aria-live="polite"></span></label>
  <button class="upload-submit" id="save-pdfs" type="button">Guardar PDF</button>
  </form>`:''}
  ${storageMessage?`<p class="storage-error" role="status">${html(storageMessage)}</p>`:''}`;
@@ -509,15 +529,15 @@ function drawer(){
   const asset=assets.find(item=>item.id===button.dataset.viewAsset);
   if(asset)show(asset.mime_type==='application/pdf'?'pdf':'img',publicFileUrl(asset),asset.file_name);
  });
- dr.querySelectorAll('[data-demo-pdf]').forEach(button=>button.onclick=()=>{
-  const documentInfo=docs(p).find(item=>item[0]===button.dataset.demoPdf);
-  if(documentInfo)show('pdf',makePDF(documentInfo[1],documentInfo[2]),documentInfo[0]);
- });
  dr.querySelectorAll('[data-primary-asset]').forEach(button=>button.onclick=async()=>{
   const asset=assets.find(item=>item.id===button.dataset.primaryAsset);
   if(!asset)return;
   try{await setPrimary(asset);setStorageMessage('Imagen principal actualizada.')}
   catch(error){setStorageMessage(error.message);drawer()}
+ });
+ dr.querySelectorAll('[data-rename-asset]').forEach(button=>button.onclick=()=>{
+  const asset=assets.find(item=>item.id===button.dataset.renameAsset);
+  if(asset)showRenameDialog(asset);
  });
  dr.querySelectorAll('[data-delete-asset]').forEach(button=>button.onclick=async()=>{
   const asset=assets.find(item=>item.id===button.dataset.deleteAsset);
@@ -530,8 +550,14 @@ function drawer(){
   const wrap=$('#typology-wrap');
   if(wrap)wrap.hidden=event.target.value!=='tipologia_departamento';
  };
- $('#gallery-upload').onchange=event=>{selectedGalleryFiles=[...event.target.files]};
- $('#pdf-upload').onchange=event=>{selectedPdfFiles=[...event.target.files]};
+ $('#gallery-upload').onchange=event=>{
+  selectedGalleryFiles=[...event.target.files];
+  $('#gallery-file-count').textContent=selectedGalleryFiles.length?`${selectedGalleryFiles.length} imagen(es) seleccionada(s)`:'';
+ };
+ $('#pdf-upload').onchange=event=>{
+  selectedPdfFiles=[...event.target.files];
+  $('#pdf-file-count').textContent=selectedPdfFiles.length?`${selectedPdfFiles.length} PDF seleccionado(s)`:'';
+ };
  $('#asset-upload-form').onsubmit=async event=>{
   event.preventDefault();
   try{

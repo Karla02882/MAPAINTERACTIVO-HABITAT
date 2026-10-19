@@ -47,6 +47,6 @@ Si Supabase no está configurado o no se puede conectar, el catálogo y el mapa 
 
 ## Galería y portadas
 
-Las galerías se organizan en **Fachada** para departamentos, casas y oficinas; **Pórtico** para lotes y casas de campo; **Áreas comunes** para todos; y grupos separados por tipología en proyectos de departamentos. La primera imagen agregada a la categoría de portada se selecciona como imagen principal automáticamente. Esta misma imagen aparece en la ficha y como miniatura en la lista. Un administrador puede cambiarla desde la galería.
+Las galerías se organizan en **Fachada** para departamentos, casas y oficinas; **Pórtico** para lotes y casas de campo; **Áreas comunes** para todos; y grupos separados por tipología en proyectos de departamentos. Se pueden seleccionar varias imágenes y PDF en una misma carga. Los administradores pueden cambiar el nombre visible de cada imagen desde **Renombrar**; el archivo almacenado no cambia de ruta. La primera imagen agregada a la categoría de portada se selecciona como imagen principal automáticamente. Esta misma imagen aparece en la ficha y como miniatura en la lista. Un administrador puede cambiarla desde la galería.
 
-La opción de reemplazar la galería elimina las imágenes anteriores del proyecto y las sustituye por la carga nueva. Los documentos PDF se administran por separado y no se eliminan al reemplazar imágenes.
+La opción de reemplazar la galería elimina las imágenes anteriores del proyecto y las sustituye por la carga nueva. Los documentos PDF se administran por separado y no se eliminan al reemplazar imágenes. Las fichas solo muestran los PDF que hayan subido los administradores; no incluyen documentos de demostración.
