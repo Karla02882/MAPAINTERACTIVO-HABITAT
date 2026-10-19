@@ -510,7 +510,7 @@ function drawer(){
  const dr=$('#drawer'),assets=projectAssets(p.id);
  const pdfs=assets.filter(asset=>asset.category==='documento');
  const categories=uploadCategories(p),cover=primaryImage(p);
- const coverMarkup=cover?`<button class="project-cover" type="button" data-view-asset="${html(cover.id)}"><img src="${html(publicFileUrl(cover))}" alt="${html(cover.file_name)}"><span>${html(cover.file_name)} · Imagen principal</span></button>`:'';
+ const coverMarkup=cover?`<button class="project-cover" type="button" data-view-asset="${html(cover.id)}"><img src="${html(publicFileUrl(cover))}" alt="${html(cover.file_name)}"><span>${html(categoryName(cover.category))}</span></button>`:'';
  dr.innerHTML=`<button class="close" id="x" type="button">Cerrar</button>${coverMarkup}<h2>${html(p.n)}</h2><div style="color:var(--mute)"><i class="dot" style="background:${COL[p.s]}"></i>${html(p.s)} · ${html(p.d)}</div><p class="project-location">${html(p.loc)}</p>
  <div class="facts"><div><small>Tipo</small><b>${html(p.t)}</b></div><div><small>Estado</small><b>${html(p.s)}</b></div><div><small>Precio</small><b>${html(p.pr||'Consultar')}</b></div><div><small>Área</small><b>${html(p.a)}</b></div></div>
  <h3>Galería</h3>${galleryMarkup(p)}
