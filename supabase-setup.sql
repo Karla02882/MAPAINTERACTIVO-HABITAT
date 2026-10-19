@@ -21,7 +21,7 @@ insert into public.projects (id, name, project_type) values
   ('los-jardines-de-la-huaycha', 'LOS JARDINES DE LA HUAYCHA', 'Lotes'),
   ('la-pradera-de-quepepampa', 'LA PRADERA DE QUEPEPAMPA', 'Lotes'),
   ('la-libertad', 'LA LIBERTAD', 'Lotes'),
-  ('el-trebol', 'EL TREBOL', 'Lotes'),
+  ('el-trebol', 'EL TREBOLL', 'Lotes'),
   ('san-isidro-v', 'SAN ISIDRO V', 'Casa de campo'),
   ('joya-verde', 'JOYA VERDE', 'Casa de campo'),
   ('magnolias', 'MAGNOLIAS', 'Oficinas'),

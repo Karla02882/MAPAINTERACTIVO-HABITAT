@@ -161,21 +161,21 @@ const P=[
 {n:'AGUIRRE 619',d:'El Tambo',loc:'Cerca al Parque Manzanos',a:'Desde 75 m²',pr:'S/.280,000',t:'Departamentos',s:'Ejecución',h:150},
 {n:'TORRE BLANCA',d:'Pilcomayo',loc:'Coronel Parra 1840',a:'Desde 68 m²',pr:'S/.220,000',t:'Departamentos',s:'Ejecución',h:30},
 {n:'ALAMEDA',d:'Huancayo',loc:'A unas cuadras del Nuevo Hospital La Libertad',a:'Desde 70 m²',pr:'S/.260,000',t:'Departamentos',s:'Ejecución',h:260},
-{n:'JARDINES',d:'Huancayo',loc:'A una cuadra del Parque Tanquish',a:'Desde 36 m²',pr:'S/.141,000',t:'Departamentos',s:'Anteproyecto',h:350},
-{n:'LOS SAUCES',d:'El Tambo',loc:'Cerca a la UNCP',a:'Desde 89 m²',pr:'S/.240,000',t:'Departamentos',s:'Sold Out',h:100},
+{n:'JARDINES',d:'Huancayo',loc:'A una cuadra del Parque Tanquish',a:'Desde 36 m²',pr:'S/.141,000',t:'Departamentos',s:'Ejecución',h:350},
+{n:'LOS SAUCES',d:'El Tambo',loc:'Cerca a la UNCP',a:'Desde 89 m²',pr:'S/.240,000',t:'Departamentos',s:'Anteproyecto',h:100},
 {n:'LAS ISLAS',d:'El Tambo',loc:'Las Islas 541, Huancayo',a:'Desde 71.69 m²',pr:'',t:'Departamentos',s:'Sold Out',h:215},
 {n:'LIMA 2',d:'El Tambo',loc:'El Tambo',a:'Desde 60 m²',pr:'',t:'Departamentos',s:'Ejecución',h:130},
 {n:'LAS HUERTAS DE SICAYA',d:'Sicaya',loc:'A unas cuadras del estadio municipal de Sicaya',a:'Desde 90 m²',pr:'S/.39,000',t:'Lotes',s:'Ejecución',h:185},
-{n:'LOS JARDINES DE LA HUAYCHA',d:'Mito',loc:'Mito',a:'Desde 90 m²',pr:'S/.45,000',t:'Lotes',s:'Anteproyecto',h:150},
-{n:'LA PRADERA DE QUEPEPAMPA',d:'Chancay',loc:'Huaral',a:'Desde 120 m²',pr:'S/.26,000',t:'Lotes',s:'Sold Out',h:30},
+{n:'LOS JARDINES DE LA HUAYCHA',d:'Mito',loc:'Mito',a:'Desde 90 m²',pr:'S/.45,000',t:'Lotes',s:'Ejecución',h:150},
+{n:'LA PRADERA DE QUEPEPAMPA',d:'Chancay',loc:'Huaral',a:'Desde 120 m²',pr:'S/.26,000',t:'Lotes',s:'Anteproyecto',h:30},
 {n:'LA LIBERTAD',d:'Sicaya',loc:'A 5 minutos de la plaza de Sicaya',a:'Desde 97 m²',pr:'',t:'Lotes',s:'Sold Out',h:260},
-{n:'EL TREBOL',d:'Palian',loc:'Av. Agricultura, Palian',a:'Desde 90 m²',pr:'',t:'Lotes',s:'Sold Out',h:350},
+{id:'el-trebol',n:'EL TREBOLL',d:'Palian',loc:'Av. Agricultura, Palian',a:'Desde 90 m²',pr:'',t:'Lotes',s:'Sold Out',h:350},
 {n:'SAN ISIDRO V',d:'Tres de Diciembre',loc:'Jr. La Amistad',a:'Desde 94 m²',pr:'',t:'Casa de campo',s:'Ejecución',h:100},
-{n:'JOYA VERDE',d:'San Ramón',loc:'Cerca de la Playa La Auvernia, San Ramón',a:'Desde 203 m²',pr:'S/.15,000',t:'Casa de campo',s:'Anteproyecto',h:215},
+{n:'JOYA VERDE',d:'San Ramón',loc:'Cerca de la Playa La Auvernia, San Ramón',a:'Desde 203 m²',pr:'S/.15,000',t:'Casa de campo',s:'Ejecución',h:215},
 {n:'MAGNOLIAS',d:'El Tambo',loc:'Calle Magnolias y Jr. Manchego Muñoz',a:'Desde 144 m²',pr:'S/.462,000',t:'Oficinas',s:'Ejecución',h:130},
 {n:'HABITAT',d:'El Tambo',loc:'Jr. Manzanos y Calle Real',a:'Desde 30 m²',pr:'S/.113,000',t:'Oficinas',s:'Ejecución',h:30}
 ];
-P.forEach(p=>{p.id=p.n.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')});
+P.forEach(p=>{p.id=p.id||p.n.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')});
 const $=q=>document.querySelector(q);
 const SUPABASE_BUCKET=window.HABITAT_SUPABASE_BUCKET||'project-files';
 let supabase=null,currentUser=null,isProjectAdmin=false,sel=null,typeFilter='Todos',statusFilter='Todos';
