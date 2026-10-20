@@ -50,3 +50,25 @@ Si Supabase no está configurado o no se puede conectar, el catálogo y el mapa 
 Las galerías se organizan en **Fachada** para departamentos, casas y oficinas; **Pórtico** para lotes y casas de campo; **Áreas comunes** para todos; y grupos separados por tipología en proyectos de departamentos. Se pueden seleccionar varias imágenes y PDF en una misma carga. Los administradores pueden cambiar el nombre visible de cada imagen desde **Renombrar**; el archivo almacenado no cambia de ruta. La primera imagen agregada a la categoría de portada se selecciona como imagen principal automáticamente. Esta misma imagen aparece en la ficha y como miniatura en la lista. Un administrador puede cambiarla desde la galería.
 
 La opción de reemplazar la galería elimina las imágenes anteriores del proyecto y las sustituye por la carga nueva. Los documentos PDF se administran por separado y no se eliminan al reemplazar imágenes. Las fichas solo muestran los PDF que hayan subido los administradores; no incluyen documentos de demostración.
+
+## Planos interactivos
+
+La opción **Planos** se integra con los proyectos y el inicio de sesión actuales. Para activarla, ejecuta [`supabase-plans-migration.sql`](./supabase-plans-migration.sql) en el SQL Editor del mismo proyecto Supabase, después de `supabase-setup.sql`. La migración añade planos, unidades inmobiliarias, geometrías y políticas RLS; cada plano guarda el identificador del proyecto existente al que pertenece. Los datos de propietario se guardan en una tabla privada para administradores. No crea proyectos ni propiedades de ejemplo.
+
+Los administradores pueden subir un PDF o DXF de hasta 25 MB desde el plano del proyecto. Para cada plano PDF se elige la página que se quiere mostrar. Los PDF se renderizan en el navegador mediante PDF.js a una resolución de hasta 2000 píxeles por lado; los archivos no se envían a un servicio de conversión. El lector PDF se carga desde jsDelivr cuando se abre un PDF. Si el PDF contiene etiquetas de texto `LOTE n` y áreas, se pueden importar automáticamente los números, las áreas sin discrepancias y sus ubicaciones para habilitar la selección y la ficha de datos. Los números se muestran como marcadores clicables sobre el plano. Las zonas de esos lotes siguen siendo el dibujo original del PDF; sus límites no se inventan ni se convierten en polígonos. Un DXF muestra líneas y círculos y permite importar como propiedades sus contornos cerrados `LWPOLYLINE` y `POLYLINE`; luego se pueden editar sus códigos y completar los datos oficiales. Los archivos DWG deben exportarse a DXF antes de cargarse. Los elementos que no se detecten o no tengan un contorno cerrado se pueden delimitar o volver a dibujar manualmente. En JOYA VERDE, el botón **Restaurar marcador PDF** devuelve un lote redibujado a la posición de su número original.
+
+Al dibujar, las geometrías se guardan en las coordenadas del plano. No se muestran áreas geométricas calculadas ni se sustituyen las áreas oficiales. Los estados **Disponible**, **Reservado**, **Vendido** y **Bloqueado** se muestran en verde, amarillo, rojo y morado. La búsqueda encuentra códigos, manzanas, casas, edificios, torres y pisos; los cambios guardados se sincronizan con Supabase y las otras sesiones consultan actualizaciones cada 30 segundos mientras el módulo está abierto. JOYA VERDE no utiliza manzanas.
+
+Al abrir **Planos**, cada proyecto abre automáticamente el plano que se seleccionó por última vez para ese proyecto o, si aún no hay una selección, el primer plano disponible. Si tiene varios pisos o planos, se puede cambiar desde el selector **Plano**. También se puede entrar directamente desde la ficha de un proyecto con **Ver plano interactivo**.
+
+Para asociar el PDF adjunto a **JOYA VERDE**, aplica primero la migración, inicia sesión como administrador, abre la ficha de JOYA VERDE y pulsa **Ver plano interactivo**. En **Agregar plano PDF/DXF**, el proyecto queda asociado automáticamente; selecciona `LA AUVERNIA LOTIZACION (1)-Model.octubre.pdf`, indica un nombre para el plano y la página PDF, y guárdalo. Ese archivo concreto detecta e importa automáticamente sus lotes numerados y áreas legibles al guardarse; también se pueden importar manualmente los lotes detectados desde cualquier otro PDF. Quedará en el almacenamiento central de Supabase y se abrirá al seleccionar JOYA VERDE desde cualquier dispositivo.
+
+Para probarlo:
+
+1. Aplica la migración SQL y recarga el sitio.
+2. Inicia sesión como administrador, pulsa **Planos**, elige un proyecto y agrega un plano PDF o DXF.
+3. Pulsa **Nueva propiedad**, completa el código y dibuja el contorno haciendo clic en el plano; termina con **Cerrar contorno** y guarda.
+4. Cambia el estado y guarda: el color del polígono y de la lista debe actualizarse. Prueba el buscador y el filtro por estado.
+5. Recarga el sitio o abre otra sesión: el plano, la geometría y los datos guardados deben seguir disponibles.
+
+Los datos de propiedades que no se hayan proporcionado permanecen vacíos; la aplicación no inventa áreas, medidas, precios ni códigos oficiales.

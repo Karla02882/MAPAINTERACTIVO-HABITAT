@@ -141,11 +141,76 @@ aside{background:var(--panel);backdrop-filter:blur(18px);-webkit-backdrop-filter
 .gal button.gallery-image{display:block}
 #modal{background:rgba(0,0,0,.78);backdrop-filter:blur(15px);-webkit-backdrop-filter:blur(15px)}
 #modal .bar button,#modal .bar a{border-radius:999px;background:rgba(255,255,255,.17)}
+.plans-button{padding:8px 13px;border:1px solid var(--line);border-radius:999px;background:color-mix(in srgb,var(--sel) 10%,var(--panel));color:var(--sel);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.project-plan-button{margin:4px 0 12px;padding:9px 14px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--sel);font:inherit;font-weight:600;cursor:pointer}
+#plans-workspace{position:fixed;inset:0;z-index:20;display:none;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Segoe UI",sans-serif}
+#plans-workspace.open{display:flex;flex-direction:column}
+.plans-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 18px;border-bottom:1px solid var(--line);background:var(--panel)}
+.plans-header div{display:grid;gap:2px}.plans-header strong{font-size:17px}.plans-header span,.plans-note{font-size:12px;color:var(--mute)}
+.plans-header button,.plans-toolbar button,.plans-admin-tools button,.plans-draw-tools button,.plans-edit-actions button{border:0;border-radius:999px;padding:8px 12px;background:var(--sel);color:#fff;font:inherit;font-size:12px;font-weight:600;cursor:pointer}
+.plans-toolbar{display:flex;align-items:end;gap:8px;padding:9px 12px;border-bottom:1px solid var(--line);background:var(--panel)}
+.plans-toolbar label,.plans-search label{display:grid;gap:3px;font-size:11px;color:var(--mute);font-weight:600}
+.plans-toolbar select,.plans-search select,.plans-search input,.plans-admin-tools input,.plans-draw-tools input,.plans-inspector input,.plans-inspector select,.plans-inspector textarea{min-height:36px;max-width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink);font:inherit;font-size:12px}
+.plans-toolbar [data-field=project]{width:min(230px,24vw)}.plans-toolbar [data-field=plan]{width:min(260px,27vw)}
+.plans-toolbar input[type=range]{width:125px;accent-color:var(--sel)}
+.plans-toolbar button{min-width:34px;padding:7px}
+.plans-layout{display:grid;grid-template-columns:260px minmax(200px,1fr) 300px;flex:1;min-height:0}
+.plans-sidebar,.plans-inspector{min-width:0;overflow:auto;padding:12px;background:var(--panel)}
+.plans-sidebar{border-right:1px solid var(--line);display:flex;flex-direction:column;gap:9px}
+.plans-search{display:grid;gap:8px}.plans-search input,.plans-search select{width:100%}
+.plans-list{display:grid;gap:5px;overflow:auto;min-height:80px}
+.plan-property{display:flex;align-items:center;gap:8px;width:100%;padding:8px;border:1px solid transparent;border-radius:10px;background:transparent;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.plan-property:hover,.plan-property.selected{border-color:var(--line);background:var(--bg)}
+.plan-property i{width:12px;height:12px;flex:none;border-radius:50%;background:var(--property-color)}
+.plan-property span{display:grid;gap:2px;min-width:0}.plan-property b{font-size:12px;overflow-wrap:anywhere}.plan-property small{font-size:10px;color:var(--mute)}
+.plans-empty{font-size:12px;color:var(--mute)}
+.plans-admin-tools{display:grid;gap:8px;margin-top:auto}
+.plans-admin-tools details{padding:9px;border:1px solid var(--line);border-radius:12px}
+.plans-admin-tools summary{font-size:12px;font-weight:600;cursor:pointer}
+.plans-admin-tools form{display:grid;gap:8px;margin-top:10px}
+.plans-admin-tools form label{display:grid;gap:4px;font-size:11px;color:var(--mute)}
+.plans-admin-tools form input[type=file]{font-size:11px}
+.plans-admin-tools button:disabled{opacity:.5}
+.plans-stage{position:relative;display:flex;align-items:center;justify-content:center;min-width:0;min-height:0;overflow:hidden;background-color:var(--bg);background-image:radial-gradient(var(--line) .8px,transparent .8px);background-size:18px 18px}
+.plans-stage-message{max-width:560px;padding:20px;color:var(--mute);font-size:14px;text-align:center}
+.plans-pan{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden;touch-action:none}
+.plans-surface{position:relative;flex:none;transform-origin:center center;box-shadow:0 8px 25px #0003;background:#fff}
+.plans-surface[hidden],.plans-stage-message[hidden]{display:none}
+.plans-surface canvas,.plans-surface svg{position:absolute;inset:0;display:block;width:100%;height:100%}
+.plans-surface canvas{object-fit:fill}
+.plans-surface canvas[hidden]{display:none}
+.plans-surface svg{overflow:visible;touch-action:none}
+.dxf-background{fill:none;stroke:#59636e;stroke-width:.7;vector-effect:non-scaling-stroke}
+.plan-unit{cursor:pointer;outline:none}
+.plan-unit polygon{transition:fill-opacity .12s,stroke .12s}
+.plan-unit:hover polygon,.plan-unit.selected polygon{fill-opacity:.65}
+.plan-unit text{fill:#17212b;font: bold 2.2px sans-serif;paint-order:stroke;stroke:#fff;stroke-width:.5px;pointer-events:none}
+.drawing-points polyline{fill:none;stroke:#007AFF;stroke-width:2;stroke-dasharray:5 3;vector-effect:non-scaling-stroke}
+.drawing-points circle{fill:#007AFF;stroke:#fff;stroke-width:1;vector-effect:non-scaling-stroke}
+.plans-draw-tools{position:absolute;left:8px;right:8px;bottom:8px;z-index:2;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px;padding:7px;border:1px solid var(--line);border-radius:14px;background:color-mix(in srgb,var(--panel) 94%,transparent);box-shadow:0 4px 18px #0002}
+.plans-draw-tools label{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--mute)}
+.plans-draw-tools input{width:95px;min-height:30px}
+.plans-draw-tools button{padding:7px 10px}.plans-draw-tools span{font-size:10px;color:var(--mute)}
+.plans-inspector{border-left:1px solid var(--line)}
+.plans-inspector h2{margin:0 0 4px;font-size:17px}.plans-inspector>p{font-size:12px;color:var(--mute)}
+.plans-property-kind{color:var(--mute);font-size:11px}
+.plans-inspector form{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.plans-inspector label{display:grid;gap:3px;min-width:0;color:var(--mute);font-size:10px;font-weight:600}
+.plans-inspector label:has(textarea){grid-column:1/-1}
+.plans-inspector textarea{width:100%;min-height:60px;resize:vertical}
+.plans-inspector input,.plans-inspector select{width:100%}
+.plans-edit-actions{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}
+.plans-edit-actions button{padding:7px 9px;font-size:10px}.plans-edit-actions .danger{background:#FF3B30}
+.plans-status{position:absolute;left:50%;bottom:8px;z-index:3;transform:translateX(-50%);max-width:80%;margin:0;padding:6px 10px;border-radius:999px;background:var(--panel);box-shadow:0 3px 12px #0002;color:var(--ink);font-size:11px;text-align:center;pointer-events:none}
+.plans-status:empty{display:none}
+body.plans-open{overflow:hidden}
+@media(max-width:850px){.plans-layout{grid-template-columns:220px minmax(160px,1fr)}.plans-inspector{position:absolute;z-index:3;right:0;bottom:0;width:min(360px,75vw);max-height:48%;border:1px solid var(--line);border-radius:16px 0 0 0;box-shadow:0 0 18px #0002}.plans-draw-tools{bottom:auto;top:8px}.plans-toolbar{flex-wrap:wrap}}
+@media(max-width:600px){.plans-header{padding:10px 12px}.plans-toolbar{gap:5px}.plans-toolbar label:first-child{flex:1}.plans-toolbar [data-field=project],.plans-toolbar [data-field=plan]{width:100%}.plans-layout{grid-template-columns:1fr;grid-template-rows:minmax(110px,22dvh) minmax(200px,1fr)}.plans-sidebar{border:0;border-bottom:1px solid var(--line);padding:8px;gap:6px}.plans-search{grid-template-columns:1fr 1fr}.plans-list{grid-template-columns:repeat(2,minmax(0,1fr));max-height:70px}.plans-admin-tools{position:absolute;top:100px;left:8px;z-index:2;max-width:190px}.plans-admin-tools details{background:var(--panel)}.plans-admin-tools form input[type=file]{max-width:160px}.plans-inspector{right:6px;bottom:56px;width:min(330px,88vw);max-height:52%;padding:10px}.plans-status{bottom:5px}.plans-draw-tools{top:6px;left:6px;right:6px}}
 @media(max-width:760px){main{grid-template-columns:1fr;grid-template-rows:minmax(260px,38dvh) minmax(400px,1fr)}aside{max-height:none;border:0}.chips{padding:8px 12px}.chip{padding:6px 11px}.item{padding:10px 12px}#drawer{top:auto;left:0;right:0;bottom:0;width:100%;max-height:min(82dvh,760px);border:1px solid var(--line);border-bottom:0;border-radius:22px 22px 0 0;transform:translateY(102%);padding:22px 18px calc(22px + env(safe-area-inset-bottom,0px))}#drawer.open{transform:translateY(0)}.close{top:0}header{padding:12px 16px;align-items:flex-start}header p{font-size:12px}#account-area{width:100%;margin:0;justify-content:space-between}}
 </style>
 </head>
 <body>
-<header><h1>Proyectos en Huancayo</h1><p>Explora departamentos, lotes, casas y oficinas. Selecciona un proyecto para ver sus imágenes y documentos.</p><div id="account-area"><span id="account-status">Conectando almacenamiento…</span><button id="account-button" type="button">Iniciar sesión</button></div></header>
+<header><h1>Proyectos en Huancayo</h1><p>Explora departamentos, lotes, casas y oficinas. Selecciona un proyecto para ver sus imágenes y documentos.</p><div id="account-area"><span id="account-status">Conectando almacenamiento…</span><button id="plans-button" class="plans-button" type="button">Planos</button><button id="account-button" type="button">Iniciar sesión</button></div></header>
 <main>
 <aside><div class="chips" id="type-chips"></div><div class="chips" id="status-chips"></div><div id="storage-status" role="status" aria-live="polite"></div><div id="list"></div></aside>
 <div id="mapwrap">
@@ -155,6 +220,7 @@ aside{background:var(--panel);backdrop-filter:blur(18px);-webkit-backdrop-filter
 </main>
 <div id="modal" role="dialog" aria-modal="true"></div>
 <script type="module">
+import{createPlanWorkspace}from'./plan-feature.js';
 const COL={'Ejecución':'var(--ok)','Anteproyecto':'var(--build)','Sold Out':'var(--sold)'};
 const P=[
 {n:'SAN ANTONIO',d:'Huancayo',loc:'Av. San Antonio y Av. San Carlos',a:'Desde 49 m²',pr:'S/.235,000',t:'Departamentos',s:'Ejecución',h:195},
@@ -164,15 +230,15 @@ const P=[
 {n:'JARDINES',d:'Huancayo',loc:'A una cuadra del Parque Tanquish',a:'Desde 36 m²',pr:'S/.141,000',t:'Departamentos',s:'Ejecución',h:350},
 {n:'LOS SAUCES',d:'El Tambo',loc:'Cerca a la UNCP',a:'Desde 89 m²',pr:'S/.240,000',t:'Departamentos',s:'Anteproyecto',h:100},
 {n:'LAS ISLAS',d:'El Tambo',loc:'Las Islas 541, Huancayo',a:'Desde 71.69 m²',pr:'',t:'Departamentos',s:'Sold Out',h:215},
-{n:'LIMA 2',d:'El Tambo',loc:'El Tambo',a:'Desde 60 m²',pr:'',t:'Departamentos',s:'Ejecución',h:130},
+{n:'LIMA 2',d:'El Tambo',loc:'El Tambo',a:'Desde 60 m²',pr:'',t:'Departamentos',s:'Sold Out',h:130},
 {n:'LAS HUERTAS DE SICAYA',d:'Sicaya',loc:'A unas cuadras del estadio municipal de Sicaya',a:'Desde 90 m²',pr:'S/.39,000',t:'Lotes',s:'Ejecución',h:185},
 {n:'LOS JARDINES DE LA HUAYCHA',d:'Mito',loc:'Mito',a:'Desde 90 m²',pr:'S/.45,000',t:'Lotes',s:'Ejecución',h:150},
 {n:'LA PRADERA DE QUEPEPAMPA',d:'Chancay',loc:'Huaral',a:'Desde 120 m²',pr:'S/.26,000',t:'Lotes',s:'Anteproyecto',h:30},
 {n:'LA LIBERTAD',d:'Sicaya',loc:'A 5 minutos de la plaza de Sicaya',a:'Desde 97 m²',pr:'',t:'Lotes',s:'Sold Out',h:260},
 {id:'el-trebol',n:'EL TREBOLL',d:'Palian',loc:'Av. Agricultura, Palian',a:'Desde 90 m²',pr:'',t:'Lotes',s:'Sold Out',h:350},
-{n:'SAN ISIDRO V',d:'Tres de Diciembre',loc:'Jr. La Amistad',a:'Desde 94 m²',pr:'',t:'Casa de campo',s:'Ejecución',h:100},
+{n:'SAN ISIDRO V',d:'Tres de Diciembre',loc:'Jr. La Amistad',a:'Desde 94 m²',pr:'',t:'Lotes',s:'Sold Out',h:100},
 {n:'JOYA VERDE',d:'San Ramón',loc:'Cerca de la Playa La Auvernia, San Ramón',a:'Desde 203 m²',pr:'S/.15,000',t:'Casa de campo',s:'Ejecución',h:215},
-{n:'MAGNOLIAS',d:'El Tambo',loc:'Calle Magnolias y Jr. Manchego Muñoz',a:'Desde 144 m²',pr:'S/.462,000',t:'Oficinas',s:'Ejecución',h:130},
+{n:'MAGNOLIAS',d:'El Tambo',loc:'Calle Magnolias y Jr. Manchego Muñoz',a:'Desde 144 m²',pr:'S/.462,000',t:'Casas',s:'Ejecución',h:130},
 {n:'HABITAT',d:'El Tambo',loc:'Jr. Manzanos y Calle Real',a:'Desde 30 m²',pr:'S/.113,000',t:'Oficinas',s:'Ejecución',h:30}
 ];
 P.forEach(p=>{p.id=p.id||p.n.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')});
@@ -508,9 +574,11 @@ function drawer(){
  const dr=$('#drawer'),assets=projectAssets(p.id);
  const pdfs=assets.filter(asset=>asset.category==='documento');
  const categories=uploadCategories(p),cover=primaryImage(p);
+ const supportsPlans=['Lotes','Departamentos','Casas','Casa de campo'].includes(p.t);
  const coverMarkup=cover?`<button class="project-cover" type="button" data-view-asset="${html(cover.id)}"><img src="${html(publicFileUrl(cover))}" alt="${html(cover.file_name)}"><span>${html(categoryName(cover.category))}</span></button>`:'';
  dr.innerHTML=`<button class="close" id="x" type="button">Cerrar</button>${coverMarkup}<h2>${html(p.n)}</h2><div style="color:var(--mute)"><i class="dot" style="background:${COL[p.s]}"></i><span style="color:${COL[p.s]}">${html(p.s)}</span> · ${html(p.d)}</div><p class="project-location">${html(p.loc)}</p>
  <div class="facts"><div><small>Tipo</small><b>${html(p.t)}</b></div><div><small>Estado</small><b>${html(p.s)}</b></div><div><small>Precio</small><b>${html(p.pr||'Consultar')}</b></div><div><small>Área</small><b>${html(p.a)}</b></div></div>
+ ${supportsPlans?'<button class="project-plan-button" type="button" data-open-project-plan>Ver plano interactivo</button>':''}
  <h3>Galería</h3>${galleryMarkup(p)}
  ${pdfs.length?`<h3>Documentos</h3><div class="docs">${pdfs.map(asset=>`<div class="document-row"><button type="button" data-view-asset="${html(asset.id)}"><span class="tag">PDF</span>${html(asset.file_name)}</button>${isProjectAdmin?`<button class="delete-asset" type="button" data-delete-asset="${html(asset.id)}" aria-label="Eliminar ${html(asset.file_name)}">×</button>`:''}</div>`).join('')}</div>`:''}
  ${isProjectAdmin?`<form class="upload-form" id="asset-upload-form">
@@ -526,6 +594,10 @@ function drawer(){
  ${storageMessage?`<p class="storage-error" role="status">${html(storageMessage)}</p>`:''}`;
  dr.classList.add('open');
  $('#x').onclick=()=>{sel=null;dr.classList.remove('open');renderAll()};
+ dr.querySelector('[data-open-project-plan]')?.addEventListener('click',()=>{
+  dr.classList.remove('open');
+  planWorkspace.open(p.id);
+ });
  dr.querySelectorAll('[data-view-asset]').forEach(button=>button.onclick=()=>{
   const asset=assets.find(item=>item.id===button.dataset.viewAsset);
   if(asset)show(asset.mime_type==='application/pdf'?'pdf':'img',publicFileUrl(asset),asset.file_name);
@@ -599,6 +671,8 @@ $('#account-button').onclick=async()=>{
   if(error)throw error;
  }catch(error){setStorageMessage(`No se pudo cerrar sesión: ${error.message||'error de red'}`)}
 };
+const planWorkspace=createPlanWorkspace({getSupabase:()=>supabase,getIsAdmin:()=>isProjectAdmin,getUser:()=>currentUser,getProjects:()=>P,onSelectProject:open});
+$('#plans-button').onclick=()=>planWorkspace.open();
 renderChips();renderAll();initializeCloud();
 </script>
 </body>
