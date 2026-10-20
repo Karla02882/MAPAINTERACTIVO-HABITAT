@@ -460,9 +460,10 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   if(!['pdf','dxf'].includes(ext))throw new Error('Solo se admiten planos PDF y DXF. Convierte los DWG a DXF antes de subirlos.');
   if(file.size>25*1024*1024)throw new Error('El plano supera el límite de 25 MB.');
   const sourceType=ext,mimeType=sourceType==='pdf'?'application/pdf':'application/dxf';
+  const uploadFile=sourceType==='dxf'&&file.type!==mimeType?new File([file],file.name,{type:mimeType}):file;
   const path=`plans/${project.id}/${crypto.randomUUID()}-${slug(file.name)}`;
   statusMessage('Subiendo plano…');
-  const {data:stored,error:uploadError}=await getSupabase().storage.from(BUCKET).upload(path,file,{contentType:mimeType,upsert:false});
+  const {data:stored,error:uploadError}=await getSupabase().storage.from(BUCKET).upload(path,uploadFile,{contentType:mimeType,upsert:false});
   if(uploadError)throw new Error(`No se pudo subir el plano: ${uploadError.message}`);
   const pageNumber=Number(form.elements.page_number.value||1);
   const planData={project_id:project.id,name:form.elements.name.value.trim(),floor_label:form.elements.floor.value.trim()||null,source_type:sourceType,file_path:stored.path,file_name:file.name,page_number:sourceType==='pdf'?pageNumber:1,created_by:getUser()?.id||null};
