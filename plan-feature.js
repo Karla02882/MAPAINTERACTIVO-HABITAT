@@ -119,6 +119,10 @@ function sceneViewport(scene){
  return scene.viewBox||{x:0,y:0,width:scene.width,height:scene.height};
 }
 
+function isHuertasSicayaPlan(project,plan){
+ return project?.id==='las-huertas-de-sicaya'&&plan?.file_name?.trim().toLocaleLowerCase('es')===HUERTAS_SICAYA_DXF.toLocaleLowerCase('es');
+}
+
 export function matchHuertasSicayaLots(scene){
  const parcelPolygons=scene.polygons.filter(polygon=>polygon.layer==='VIVIENDA');
  const lotLabels=scene.labels.filter(label=>label.layer==='VIVIENDA'&&/^\d+$/.test(label.text));
@@ -363,7 +367,7 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
      else{plan.source_width=state.scene.width;plan.source_height=state.scene.height}
     }
    }
-   if(projectById()?.id==='las-huertas-de-sicaya'&&plan.file_name===HUERTAS_SICAYA_DXF){
+   if(isHuertasSicayaPlan(projectById(),plan)){
     try{await importHuertasSicayaLots()}
     catch(error){statusMessage(`El plano se abrió, pero no se pudieron importar los lotes: ${error.message}`)}
    }
@@ -399,7 +403,7 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   const response=await fetch(publicPlanUrl(plan));
   if(!response.ok)throw new Error(`El archivo DXF no pudo descargarse (HTTP ${response.status}).`);
   const scene=parseDxf(await response.text());
-  if(projectById()?.id==='las-huertas-de-sicaya'&&plan.file_name===HUERTAS_SICAYA_DXF){
+  if(isHuertasSicayaPlan(projectById(),plan)){
    const lots=matchHuertasSicayaLots(scene);
    scene.huertasLotCount=lots.length;
    if(lots.length===HUERTAS_SICAYA_LOTS.length){
@@ -606,7 +610,7 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   if(!state.scene){svg.replaceChildren();return}
   const viewport=sceneViewport(state.scene);
   svg.setAttribute('viewBox',`${viewport.x} ${viewport.y} ${viewport.width} ${viewport.height}`);
-  const dxfLabels=state.scene.background==='dxf'?state.scene.labels.filter(label=>/^\d+$/.test(label.text)&&label.layer==='VIVIENDA'||/^[AB]$/i.test(label.text)&&label.layer==='MANZANAS').map(label=>`<text x="${label.position[0]}" y="${label.position[1]}" text-anchor="middle" dominant-baseline="central">${attr(label.text)}</text>`).join(''):'';
+  const dxfLabels=state.scene.background==='dxf'?state.scene.labels.filter(label=>(/^\d+$/.test(label.text)&&label.layer==='VIVIENDA')||(/^[AB]$/i.test(label.text)&&label.layer==='MANZANAS')).map(label=>`<text x="${label.position[0]}" y="${label.position[1]}" text-anchor="middle" dominant-baseline="central">${attr(label.text)}</text>`).join(''):'';
   svg.innerHTML=`${state.scene.background==='dxf'?`<g class="dxf-background">${state.scene.paths}</g><g class="dxf-labels">${dxfLabels}</g>`:''}<g class="property-shapes">${state.units.filter(unit=>unit.plan_id===state.planId).sort(comparePropertyCodes).map(renderPropertyShape).join('')}${state.draft?renderPolygon(state.draft):''}</g><g class="drawing-points">${state.drawPoints.length?`<polyline points="${state.drawPoints.map(point=>point.join(',')).join(' ')}"></polyline>${state.drawPoints.map(([x,y])=>`<circle cx="${x}" cy="${y}" r="${Math.max(viewport.width,viewport.height)*.006}"></circle>`).join('')}`:''}</g>`;
   svg.onclick=event=>{
    if(!state.drawing)return;
@@ -666,7 +670,7 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   const pdfLots=state.scene.background==='pdf'?state.scene.labels:[];
   const existingLotCodes=new Set(state.units.filter(unit=>unit.plan_id===plan.id&&unit.property_type==='Lote').map(unit=>unit.code));
   const importablePdfLots=pdfLots.filter(lot=>!existingLotCodes.has(lot.code));
-  const isSicayaPlan=project?.id==='las-huertas-de-sicaya'&&plan?.file_name===HUERTAS_SICAYA_DXF;
+  const isSicayaPlan=isHuertasSicayaPlan(project,plan);
   tools.innerHTML=`${state.drawing?'<button type="button" data-action="finish-drawing">Cerrar contorno</button><button type="button" data-action="cancel-drawing">Cancelar</button>':''}${plan.source_type==='dxf'&&state.scene.polygons.length&&!isSicayaPlan?`<button type="button" data-action="import-contours">Importar ${state.scene.polygons.length} contornos DXF</button>`:''}${isSicayaPlan?`<span>${state.scene.huertasLotCount||0} de 14 lotes oficiales detectados por manzana, número y área.</span>`:''}${importablePdfLots.length?`<button type="button" data-action="import-pdf-lots">Importar ${importablePdfLots.length} lotes numerados detectados</button>`:pdfLots.length?`<span>${pdfLots.length} lotes numerados detectados.</span>`:''}`;
   tools.querySelector('[data-action="finish-drawing"]')?.addEventListener('click',finishDrawing);
   tools.querySelector('[data-action="cancel-drawing"]')?.addEventListener('click',()=>{state.drawing=false;state.drawPoints=[];renderDrawTools();renderSvg()});
@@ -702,7 +706,7 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
  }
  async function importHuertasSicayaLots(){
   const plan=planById(),project=projectById();
-  if(!getIsAdmin()||!plan||project?.id!=='las-huertas-de-sicaya'||plan.file_name!==HUERTAS_SICAYA_DXF||state.scene?.background!=='dxf')return;
+  if(!getIsAdmin()||!plan||!isHuertasSicayaPlan(project,plan)||state.scene?.background!=='dxf')return;
   const matches=matchHuertasSicayaLots(state.scene);
   if(matches.length!==HUERTAS_SICAYA_LOTS.length){
    throw new Error(`Se detectaron ${matches.length} de ${HUERTAS_SICAYA_LOTS.length} contornos coincidentes. Verifica que el archivo DXF corresponda a LAS HUERTAS DE SICAYA.`);
