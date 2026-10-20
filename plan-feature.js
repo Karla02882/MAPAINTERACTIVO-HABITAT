@@ -22,7 +22,7 @@ const PROPERTY_STATUS={
  available:{label:'Disponible',color:'#34C759'},
  reserved:{label:'Reservado',color:'#FFCC00'},
  sold:{label:'Vendido',color:'#FF3B30'},
- blocked:{label:'Bloqueado',color:'#8E44AD'}
+ blocked:{label:'Bloqueado',color:'#8E8E93'}
 };
 const attr=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const slug=value=>value.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9._-]+/g,'-').replace(/^-+|-+$/g,'')||'plano';
@@ -166,14 +166,88 @@ export function matchHuertasSicayaLots(scene){
  return[];
 }
 
-export function parsePdfLotLabels(textContent,viewport,transformPoint){
+export function parsePdfVectorPolygons(operatorList,viewport,pdfjs){
+ const command={moveTo:pdfjs.OPS.moveTo,lineTo:pdfjs.OPS.lineTo,curveTo:pdfjs.OPS.curveTo,curveTo2:pdfjs.OPS.curveTo2,curveTo3:pdfjs.OPS.curveTo3,closePath:pdfjs.OPS.closePath,rectangle:pdfjs.OPS.rectangle};
+ const paths=[],stack=[];
+ let transform=[1,0,0,1,0,0];
+ for(let index=0;index<operatorList.fnArray.length;index++){
+  const operation=operatorList.fnArray[index],args=operatorList.argsArray[index];
+  if(operation===pdfjs.OPS.save){stack.push(transform);continue}
+  if(operation===pdfjs.OPS.restore){transform=stack.pop()||[1,0,0,1,0,0];continue}
+  if(operation===pdfjs.OPS.transform){transform=pdfjs.Util.transform(transform,args);continue}
+  if(operation!==pdfjs.OPS.constructPath)continue;
+  const [operators,coordinates]=args,subpaths=[];
+  let cursor=0,current=null;
+  for(const op of operators){
+   if(op===command.moveTo){
+    current=[];subpaths.push(current);
+    current.push([coordinates[cursor++],coordinates[cursor++]]);
+   }else if(op===command.lineTo){
+    if(current)current.push([coordinates[cursor],coordinates[cursor+1]]);
+    cursor+=2;
+   }else if(op===command.curveTo){
+    if(current)current.push([coordinates[cursor+4],coordinates[cursor+5]]);
+    cursor+=6;
+   }else if(op===command.curveTo2||op===command.curveTo3){
+    if(current)current.push([coordinates[cursor+2],coordinates[cursor+3]]);
+    cursor+=4;
+   }else if(op===command.rectangle){
+    const [x,y,width,height]=coordinates.slice(cursor,cursor+4);cursor+=4;
+    subpaths.push([[x,y],[x+width,y],[x+width,y+height],[x,y+height]]);
+    current=null;
+   }else if(op===command.closePath&&current){
+    current.closed=true;
+   }
+  }
+  for(const subpath of subpaths){
+   if(subpath.length<3)continue;
+   const points=subpath.map(([x,y])=>{
+    const transformed=[transform[0]*x+transform[2]*y+transform[4],transform[1]*x+transform[3]*y+transform[5]];
+    const viewportPoint=pdfjs.Util.applyTransform(transformed,viewport.transform);
+    return viewportPoint;
+   });
+   const area=Math.abs(points.reduce((sum,[x,y],pointIndex)=>{
+    const [nextX,nextY]=points[(pointIndex+1)%points.length];
+    return sum+x*nextY-nextX*y;
+   },0))/2;
+   if(Number.isFinite(area)&&area>=30&&area<=viewport.width*viewport.height*.3){
+    paths.push({points,area});
+   }
+  }
+ }
+ return paths;
+}
+
+function pointInPolygon(point,points){
+ let inside=false;
+ for(let i=0,j=points.length-1;i<points.length;j=i++){
+  const [x,y]=points[i],[previousX,previousY]=points[j];
+  if((y>point[1])!==(previousY>point[1])&&point[0]<(previousX-x)*(point[1]-y)/(previousY-y)+x)inside=!inside;
+ }
+ return inside;
+}
+
+function attachPdfUnitShapes(labels,polygons){
+ const centroid=points=>points.reduce((sum,[x,y])=>[sum[0]+x/points.length,sum[1]+y/points.length],[0,0]);
+ const used=new Set();
+ return labels.map(label=>{
+  const point=[label.x,label.y];
+  const candidate=polygons.filter(polygon=>!used.has(polygon)&&polygon.area>Math.max(100,label.width*label.height*2)&&pointInPolygon(point,polygon.points))
+   .sort((first,second)=>first.area-second.area)[0];
+  if(!candidate)return label;
+  used.add(candidate);
+  return{...label,geometry:{type:'Polygon',coordinates:[candidate.points]}};
+ });
+}
+
+export function parsePdfLotLabels(textContent,viewport,transformPoint,vectorPolygons=[]){
  const lots=[];
  const areas=[];
  for(const item of textContent.items||[]){
   const text=String(item.str||'').trim();
-  const lotMatch=text.match(/^LOTE\s+(\d+)$/i);
+  const unitMatch=text.match(/^(LOTE|CASA|DEPARTAMENTO|DPTO\.?|DEPTO\.?|OFICINA|UNIDAD)\s+([A-Z0-9-]+)(?:\s+(?:MZ|MANZANA)\s+([A-Z0-9-]+))?$/i);
   const areaMatch=text.match(/^(AREA(?:\s+\(([^)]+)\))?)\s*:\s*([\d.,]+)\s*m(?:2|²)$/i);
-  if(!lotMatch&&!areaMatch)continue;
+  if(!unitMatch&&!areaMatch)continue;
   const transform=transformPoint(viewport.transform,item.transform);
   const width=Math.hypot(transform[0],transform[1]);
   const height=Math.hypot(transform[2],transform[3]);
@@ -190,7 +264,13 @@ export function parsePdfLotLabels(textContent,viewport,transformPoint){
    bottom:Math.max(...corners.map(point=>point[1]))
   };
   const position={x:(bounds.left+bounds.right)/2,y:(bounds.top+bounds.bottom)/2};
-  if(lotMatch)lots.push({number:Number(lotMatch[1]),code:`LOTE ${Number(lotMatch[1])}`,...position,width:Math.max(width,height),height:Math.min(width,height),areas:[]});
+  if(unitMatch){
+   const [,rawType,identifier,block]=unitMatch;
+   const normalizedType=rawType.toUpperCase().startsWith('LOTE')?'Lote':['CASA'].includes(rawType.toUpperCase())?'Casa':'Departamento';
+   const prefix=normalizedType==='Lote'?'LOTE':normalizedType==='Casa'?'CASA':'DEPARTAMENTO';
+   const code=`${prefix} ${identifier.toUpperCase()}${block?` MZ ${block.toUpperCase()}`:''}`;
+   lots.push({number:/^\d+$/.test(identifier)?Number(identifier):null,property_type:normalizedType,block:block?.toUpperCase()||null,code,...position,width:Math.max(width,height),height:Math.min(width,height),areas:[]});
+  }
   if(areaMatch){
    const area=Number(areaMatch[3].replace(',','.'));
    if(Number.isFinite(area))areas.push({text,qualifier:areaMatch[2]||'',area,...position});
@@ -200,7 +280,7 @@ export function parsePdfLotLabels(textContent,viewport,transformPoint){
   const nearest=lots.map(lot=>({lot,distance:Math.hypot(lot.x-area.x,lot.y-area.y)})).sort((a,b)=>a.distance-b.distance)[0];
   if(nearest&&nearest.distance<=80)nearest.lot.areas.push(area);
  }
- return lots.sort((a,b)=>a.number-b.number).map(lot=>{
+ return attachPdfUnitShapes(lots.map(lot=>{
   const uniqueAreas=[...new Map(lot.areas.map(area=>[`${area.qualifier.toLocaleLowerCase('es')}:${area.area}`,area])).values()];
   const clearOfficialArea=uniqueAreas.length===1&&!uniqueAreas[0].qualifier?uniqueAreas[0].area:null;
   const observations=uniqueAreas.length>1
@@ -209,17 +289,28 @@ export function parsePdfLotLabels(textContent,viewport,transformPoint){
     ?`Área consignada en el plano (${uniqueAreas[0].qualifier}): ${uniqueAreas[0].area} m². Confirmar si corresponde al área oficial.`
     :'';
   return{...lot,area:clearOfficialArea,observations};
- });
+ }).sort((a,b)=>comparePropertyCodes(a,b)),vectorPolygons);
 }
 
 function propertyColor(status){return PROPERTY_STATUS[status]?.color||'#34C759'}
+function propertyArea(unit){
+ return numberValue(unit.area_land_m2??unit.area_total_m2??unit.area_covered_m2??unit.other_areas_m2);
+}
 function defaultType(project){
  if(project.project_type==='Lotes'||project.t==='Lotes')return'Lote';
  if(project.project_type==='Departamentos'||project.t==='Departamentos')return'Departamento';
  return'Casa';
 }
-function emptyProperty(project,plan,sequence=1){
- return{id:null,project_id:project.id,plan_id:plan.id,property_type:defaultType(project),code:`${defaultType(project)} ${sequence}`,block:'',address:'',location_label:'',building:'',tower:'',floor_label:plan.floor_label||'',area_land_m2:null,area_total_m2:null,area_covered_m2:null,other_areas_m2:null,frontage_m:null,back_m:null,side_a_m:null,side_b_m:null,floors:null,bedrooms:null,bathrooms:null,status:'available',price:null,observations:'',geometry:{type:'Polygon',coordinates:[]}};
+export function calculateFinancing({price,initialPercent=30,separation=0,installments=18}){
+ const listPrice=Math.max(0,Number(price)||0);
+ const percent=Math.min(100,Math.max(0,Number(initialPercent)||0));
+ const installmentCount=Math.min(36,Math.max(1,Math.trunc(Number(installments)||1)));
+ const finalPrice=listPrice;
+ const initialAmount=finalPrice*percent/100;
+ const separationAmount=Math.min(initialAmount,Math.max(0,Number(separation)||0));
+ const initialDue=Math.max(0,initialAmount-separationAmount);
+ const financedAmount=Math.max(0,finalPrice-initialAmount);
+ return{listPrice,separationAmount,percent,installmentCount,finalPrice,initialAmount,initialDue,financedAmount,monthlyAmount:financedAmount/installmentCount};
 }
 
 export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,onSelectProject}){
@@ -228,17 +319,26 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
  root.setAttribute('aria-label','Planos interactivos');
  root.innerHTML=`<header class="plans-header"><div><strong>Planos interactivos</strong><span>Selecciona una propiedad o administra su plano</span></div><button type="button" data-action="close">Volver al mapa</button></header>
  <div class="plans-toolbar"><label>Proyecto<select data-field="project"></select></label><label>Plano<select data-field="plan"></select></label><button type="button" data-action="zoom-out" aria-label="Reducir zoom">−</button><input data-field="zoom" type="range" min="0.5" max="4" step="0.1" value="1" aria-label="Zoom del plano"><button type="button" data-action="zoom-in" aria-label="Aumentar zoom">+</button><span data-role="zoom-label">100%</span></div>
- <div class="plans-layout"><aside class="plans-sidebar"><div class="plans-search"><label>Buscar propiedad<input data-field="search" type="search" placeholder="Código, manzana, torre, piso…"></label><label>Estado<select data-field="status-filter"><option value="">Todos los estados</option><option value="available">Disponible</option><option value="reserved">Reservado</option><option value="sold">Vendido</option><option value="blocked">Bloqueado</option></select></label></div><div class="plans-list" data-role="property-list"></div><div class="plans-admin-tools" data-role="admin-tools"></div></aside><div class="plans-stage"><div class="plans-stage-message" data-role="stage-message">Selecciona un proyecto y plano para comenzar.</div><div class="plans-pan" data-role="pan"><div class="plans-surface" data-role="surface"><canvas data-role="pdf-canvas"></canvas><svg data-role="plan-svg" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Plano interactivo"></svg></div></div><div class="plans-draw-tools" data-role="draw-tools"></div></div><aside class="plans-inspector" data-role="inspector"><h2>Ficha de propiedad</h2><p>Elige una figura del plano para consultar sus datos.</p></aside></div><p class="plans-status" role="status" aria-live="polite"></p>`;
+ <div class="plans-layout"><aside class="plans-sidebar"><div class="plans-search"><label>Buscar propiedad<input data-field="search" type="search" placeholder="Código, manzana, torre, piso…"></label><label>Estado<select data-field="status-filter"><option value="">Todos los estados</option><option value="available">Disponible</option><option value="reserved">Reservado</option><option value="sold">Vendido</option><option value="blocked">Bloqueado</option></select></label><details class="plans-range-filters"><summary>Filtrar por precio y metraje</summary><label>Precio mínimo (S/) <input data-field="price-min" type="number" min="0" step="1000" placeholder="Sin mínimo"></label><label>Precio máximo (S/) <input data-field="price-max" type="number" min="0" step="1000" placeholder="Sin máximo"></label><label>Área mínima (m²) <input data-field="area-min" type="number" min="0" step="1" placeholder="Sin mínimo"></label><label>Área máxima (m²) <input data-field="area-max" type="number" min="0" step="1" placeholder="Sin máximo"></label></details></div><div class="plans-list" data-role="property-list"></div><div class="plans-admin-tools" data-role="admin-tools"></div></aside><div class="plans-stage"><div class="plans-stage-message" data-role="stage-message">Selecciona un proyecto y plano para comenzar.</div><div class="plans-pan" data-role="pan"><div class="plans-surface" data-role="surface"><canvas data-role="pdf-canvas"></canvas><svg data-role="plan-svg" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Plano interactivo"></svg></div></div><div class="plans-map-tools" data-role="map-tools"></div></div><aside class="plans-inspector" data-role="inspector"><h2>Ficha de propiedad</h2><p>Elige una figura del plano para consultar sus datos.</p></aside></div><p class="plans-status" role="status" aria-live="polite"></p>`;
  document.body.append(root);
 
  const $=selector=>root.querySelector(selector);
- const state={open:false,projectId:'',planId:'',selectedPlanByProject:new Map(),projectLoadSequence:0,plans:[],units:[],selectedId:'',draft:null,scene:null,drawing:false,drawPoints:[],zoom:1,panX:0,panY:0,drag:null,loadingPlan:false,refreshTimer:null,pdfDocument:null};
+ const state={open:false,projectId:'',planId:'',selectedPlanByProject:new Map(),projectLoadSequence:0,plans:[],units:[],selectedId:'',scene:null,zoom:1,panX:0,panY:0,drag:null,loadingPlan:false,refreshTimer:null,pdfDocument:null,quoteModes:new Map(),quoteValues:new Map()};
  const statusMessage=text=>{$('.plans-status').textContent=text||''};
  const planById=()=>state.plans.find(plan=>plan.id===state.planId)||null;
  const projectById=()=>getProjects().find(project=>project.id===state.projectId)||null;
  const selectedUnit=()=>state.units.find(unit=>unit.id===state.selectedId)||null;
  const publicPlanUrl=plan=>getSupabase().storage.from(BUCKET).getPublicUrl(plan.file_path).data.publicUrl;
- const formatPrice=price=>price==null?'Consultar':`S/ ${Number(price).toLocaleString('es-PE')}`;
+ const formatPrice=price=>price==null?'Consultar':`S/ ${Number(price).toLocaleString('es-PE',{minimumFractionDigits:Number.isInteger(Number(price))?0:2,maximumFractionDigits:2})}`;
+ const quoteKey=unit=>unit.id||`draft:${unit.project_id}:${unit.code}`;
+ const quoteValues=unit=>{
+  const key=quoteKey(unit);
+  if(!state.quoteValues.has(key)){
+   const now=new Date(),date=new Date(now.getTime()-now.getTimezoneOffset()*60000).toISOString().slice(0,10);
+   state.quoteValues.set(key,{initialPercent:30,installments:18,separation:0,initialDate:date});
+  }
+  return state.quoteValues.get(key);
+ };
 
  function initializeSelectors(){
   const projectSelect=$('[data-field="project"]');
@@ -248,16 +348,17 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
    if(state.projectId&&state.planId)state.selectedPlanByProject.set(state.projectId,state.planId);
    state.projectId=projectSelect.value;
    state.planId=state.selectedPlanByProject.get(state.projectId)||'';
-   state.selectedId='';state.draft=null;state.scene=null;
+   state.selectedId='';state.scene=null;
    loadProjectData();
   };
   $('[data-field="plan"]').onchange=()=>{
    state.planId=$('[data-field="plan"]').value;
    if(state.projectId&&state.planId)state.selectedPlanByProject.set(state.projectId,state.planId);
-   state.selectedId='';state.draft=null;loadPlanScene();
+   state.selectedId='';loadPlanScene();
   };
   $('[data-field="search"]').oninput=renderPropertyList;
   $('[data-field="status-filter"]').onchange=renderPropertyList;
+  root.querySelectorAll('[data-field="price-min"],[data-field="price-max"],[data-field="area-min"],[data-field="area-max"]').forEach(input=>input.oninput=renderPropertyList);
   $('[data-field="zoom"]').oninput=()=>setZoom(Number($('[data-field="zoom"]').value));
   $('[data-action="close"]').onclick=close;
   $('[data-action="zoom-out"]').onclick=()=>setZoom(state.zoom-.2);
@@ -338,14 +439,13 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   state.zoom=1;state.panX=0;state.panY=0;setZoom(1);
   state.scene=null;
   state.selectedId='';
-  state.draft=null;
   renderPropertyList();
   renderInspector();
   if(!plan){
    $('.plans-surface').hidden=true;
    $('.plans-stage-message').hidden=false;
    $('.plans-stage-message').textContent='Selecciona un plano para visualizar sus propiedades.';
-   renderDrawTools();
+   renderMapTools();
    return;
   }
   state.loadingPlan=true;
@@ -356,9 +456,13 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   try{
    if(plan.source_type==='pdf')await renderPdf(plan);
    else await renderDxf(plan);
+   if(plan.source_type==='pdf'&&getIsAdmin()){
+    const imported=await syncPdfUnits(plan,projectById());
+    if(imported)statusMessage(`Se detectaron y sincronizaron ${imported} unidades desde el PDF.`);
+   }
    state.loadingPlan=false;
    renderSvg();
-   renderDrawTools();
+   renderMapTools();
    renderPropertyList();
    if(plan.source_width!==state.scene.width||plan.source_height!==state.scene.height){
     if(getIsAdmin()){
@@ -388,7 +492,9 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   const page=await document.getPage(plan.page_number);
   const viewport=page.getViewport({scale:1});
   const textContent=await page.getTextContent();
-  const labels=parsePdfLotLabels(textContent,viewport,pdfjs.Util.transform);
+  const operatorList=await page.getOperatorList();
+  const vectorPolygons=parsePdfVectorPolygons(operatorList,viewport,pdfjs);
+  const labels=parsePdfLotLabels(textContent,viewport,pdfjs.Util.transform,vectorPolygons);
   const canvas=$('[data-role="pdf-canvas"]'),context=canvas.getContext('2d');
   const scale=Math.min(2.5,2000/Math.max(viewport.width,viewport.height));
   const rendered=page.getViewport({scale});
@@ -396,8 +502,44 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   canvas.height=Math.ceil(rendered.height);
   canvas.style.aspectRatio=`${viewport.width}/${viewport.height}`;
   await page.render({canvasContext:context,viewport:rendered}).promise;
-  state.scene={width:viewport.width,height:viewport.height,background:'pdf',polygons:[],labels};
+  state.scene={width:viewport.width,height:viewport.height,background:'pdf',polygons:vectorPolygons,labels};
   canvas.hidden=false;
+ }
+ async function syncPdfUnits(plan,project){
+  if(!getIsAdmin()||!project||!state.scene?.labels?.length)return 0;
+  const labels=state.scene.labels.filter(label=>label.code&&label.x>=0&&label.y>=0&&label.x<=state.scene.width&&label.y<=state.scene.height);
+  if(!labels.length)return 0;
+  const changed=[],records=[];
+  for(const label of labels){
+   const existing=state.units.find(unit=>unit.plan_id===plan.id&&unit.property_type===label.property_type&&unit.code===label.code);
+   const geometry=label.geometry||{type:'Point',coordinates:[label.x,label.y]};
+   if(!existing){
+    records.push({project_id:project.id,plan_id:plan.id,property_type:label.property_type,code:label.code,block:label.block||null,area_land_m2:label.area,status:'available',observations:label.observations||null,geometry,created_by:getUser()?.id||null});
+    continue;
+   }
+   const geometryNeedsUpdate=JSON.stringify(existing.geometry)!==JSON.stringify(geometry);
+   const record={};
+   if(geometryNeedsUpdate)record.geometry=geometry;
+   if(existing.area_land_m2==null&&label.area!=null)record.area_land_m2=label.area;
+   if(!existing.block&&label.block)record.block=label.block;
+   if(Object.keys(record).length)changed.push({unit:existing,record});
+  }
+  const updates=await Promise.all(changed.map(async({unit,record})=>{
+   const {data,error}=await getSupabase().from('property_units').update(record).eq('id',unit.id).select().single();
+   if(error)throw new Error(`No se pudo actualizar ${unit.code} desde el PDF: ${error.message}`);
+   return data;
+  }));
+  let inserted=[];
+  if(records.length){
+   const {data,error}=await getSupabase().from('property_units').insert(records).select();
+   if(error)throw new Error(`No se pudieron guardar las unidades detectadas en el PDF: ${error.message}`);
+   inserted=data||[];
+  }
+  for(const unit of [...updates,...inserted]){
+   state.units=state.units.filter(existing=>existing.id!==unit.id);
+   state.units.push(unit);
+  }
+  return updates.length+inserted.length;
  }
  async function renderDxf(plan){
   const response=await fetch(publicPlanUrl(plan));
@@ -418,19 +560,28 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   $('[data-role="pdf-canvas"]').hidden=true;
   }
 
- function renderPropertyList(){
-  const query=$('[data-field="search"]').value.trim().toLocaleLowerCase('es');
-  const status=$('[data-field="status-filter"]').value;
-  const visible=state.units.filter(unit=>unit.plan_id===state.planId&&(!status||unit.status===status)&&(!query||[
+ function filteredPlanUnits(){
+  const query=$('[data-field="search"]').value.trim().toLocaleLowerCase('es'),status=$('[data-field="status-filter"]').value;
+  const priceMin=numberValue($('[data-field="price-min"]').value),priceMax=numberValue($('[data-field="price-max"]').value);
+  const areaMin=numberValue($('[data-field="area-min"]').value),areaMax=numberValue($('[data-field="area-max"]').value);
+  return state.units.filter(unit=>{
+   if(unit.plan_id!==state.planId||(status&&unit.status!==status))return false;
+   const area=propertyArea(unit),price=numberValue(unit.price);
+   if(priceMin!==null&&(price===null||price<priceMin)||priceMax!==null&&(price===null||price>priceMax))return false;
+   if(areaMin!==null&&(area===null||area<areaMin)||areaMax!==null&&(area===null||area>areaMax))return false;
+   return !query||[
    unit.code,unit.block,unit.address,unit.location_label,unit.building,unit.tower,unit.floor_label,unit.property_type
-  ].some(value=>String(value||'').toLocaleLowerCase('es').includes(query)))).sort(comparePropertyCodes);
+   ].some(value=>String(value||'').toLocaleLowerCase('es').includes(query));
+  }).sort(comparePropertyCodes);
+ }
+ function renderPropertyList(){
+  const visible=filteredPlanUnits();
   $('[data-role="property-list"]').innerHTML=visible.length?visible.map(unit=>`<button type="button" class="plan-property ${unit.id===state.selectedId?'selected':''}" data-unit-id="${attr(unit.id)}"><i style="--property-color:${propertyColor(unit.status)}"></i><span><b>${attr(unit.code)}</b><small>${attr(unit.block?`Mz. ${unit.block} · `:'')}${attr(unit.floor_label||unit.tower||unit.property_type)} · ${attr(PROPERTY_STATUS[unit.status]?.label||unit.status)}</small></span></button>`).join(''):'<p class="plans-empty">No hay propiedades que coincidan con la búsqueda.</p>';
   $('[data-role="property-list"]').querySelectorAll('[data-unit-id]').forEach(button=>button.onclick=()=>selectUnit(button.dataset.unitId));
   renderSvg();
  }
  function selectUnit(id){
   state.selectedId=id;
-  state.draft=null;
   const unit=selectedUnit();
   if(unit)onSelectProject(unit.project_id);
   renderPropertyList();
@@ -445,10 +596,9 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   }
   const project=projectById();
   const supported=Boolean(project);
-  container.innerHTML=`<details><summary>Agregar plano PDF/DXF</summary><form data-form="upload-plan"><label>Nombre del plano<input name="name" maxlength="100" placeholder="Ej. Plano de lotización" required></label><label>Piso / torre (opcional)<input name="floor" maxlength="80" placeholder="Ej. Torre A · Piso 3"></label><label>Página PDF<input name="page_number" type="number" min="1" step="1" value="1"></label><label>Archivo PDF o DXF<input name="file" type="file" accept=".pdf,.dxf,application/pdf,application/dxf" required></label><p class="plans-note">DWG: expórtalo a DXF antes de cargarlo. El plano queda almacenado en Supabase.</p><button type="submit" ${supported?'':'disabled'}>Subir plano</button></form></details>${state.planId?'<button type="button" data-action="new-property">Nueva propiedad</button><button type="button" data-action="delete-plan" class="danger">Eliminar plano y sus propiedades</button>':''}`;
+  container.innerHTML=`<details><summary>Agregar plano PDF/DXF</summary><form data-form="upload-plan"><label>Nombre del plano<input name="name" maxlength="100" placeholder="Ej. Plano de lotización" required></label><label>Piso / torre (opcional)<input name="floor" maxlength="80" placeholder="Ej. Torre A · Piso 3"></label><label>Página PDF<input name="page_number" type="number" min="1" step="1" value="1"></label><label>Archivo PDF o DXF<input name="file" type="file" accept=".pdf,.dxf,application/pdf,application/dxf" required></label><p class="plans-note">DWG: expórtalo a DXF antes de cargarlo. El plano queda almacenado en Supabase.</p><button type="submit" ${supported?'':'disabled'}>Subir plano</button></form></details>${state.planId?'<button type="button" data-action="delete-plan" class="danger">Eliminar plano y sus propiedades</button>':''}`;
   const form=container.querySelector('[data-form="upload-plan"]');
   form.onsubmit=event=>uploadPlan(event).catch(error=>statusMessage(error.message));
-  container.querySelector('[data-action="new-property"]')?.addEventListener('click',newProperty);
   container.querySelector('[data-action="delete-plan"]')?.addEventListener('click',deletePlan);
  }
  async function uploadPlan(event){
@@ -466,13 +616,21 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   const {data:stored,error:uploadError}=await getSupabase().storage.from(BUCKET).upload(path,uploadFile,{contentType:mimeType,upsert:false});
   if(uploadError)throw new Error(`No se pudo subir el plano: ${uploadError.message}`);
   const pageNumber=Number(form.elements.page_number.value||1);
-  const planData={project_id:project.id,name:form.elements.name.value.trim(),floor_label:form.elements.floor.value.trim()||null,source_type:sourceType,file_path:stored.path,file_name:file.name,page_number:sourceType==='pdf'?pageNumber:1,created_by:getUser()?.id||null};
-  const {data,error}=await getSupabase().from('property_plans').insert(planData).select().single();
+  const existingPlan=project.id==='joya-verde'?state.plans.find(plan=>plan.project_id===project.id&&plan.source_type==='pdf'):null;
+  const planData={project_id:project.id,name:form.elements.name.value.trim()||existingPlan?.name||file.name,floor_label:form.elements.floor.value.trim()||existingPlan?.floor_label||null,source_type:sourceType,file_path:stored.path,file_name:file.name,page_number:sourceType==='pdf'?pageNumber:1};
+  const response=existingPlan
+   ?await getSupabase().from('property_plans').update(planData).eq('id',existingPlan.id).select().single()
+   :await getSupabase().from('property_plans').insert({...planData,created_by:getUser()?.id||null}).select().single();
+  const {data,error}=response;
   if(error){
    const {error:cleanupError}=await getSupabase().storage.from(BUCKET).remove([stored.path]);
    throw new Error(`No se pudo guardar el plano: ${error.message}${cleanupError?` No se pudo limpiar el archivo subido: ${cleanupError.message}`:''}`);
   }
-  state.plans.push(data);
+  if(existingPlan){
+   state.plans=state.plans.map(plan=>plan.id===data.id?data:plan);
+   const {error:cleanupError}=await getSupabase().storage.from(BUCKET).remove([existingPlan.file_path]);
+   if(cleanupError)statusMessage(`El nuevo plano se guardó, pero no se pudo eliminar el PDF anterior: ${cleanupError.message}`);
+  }else state.plans.push(data);
   state.planId=data.id;
   state.selectedPlanByProject.set(project.id,data.id);
   renderPlanOptions();
@@ -480,10 +638,6 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   setZoom(1);
   statusMessage('Plano guardado en Supabase.');
   await loadPlanScene();
-  if(project.id==='joya-verde'&&file.name==='LA AUVERNIA LOTIZACION (1)-Model.octubre.pdf'&&state.scene?.labels.length){
-   try{await importPdfLots()}
-   catch(error){statusMessage(`El plano de JOYA VERDE se guardó, pero no se pudieron importar sus lotes: ${error.message}`)}
-  }
  }
  async function deletePlan(){
   const plan=planById();
@@ -501,21 +655,9 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   await loadPlanScene();
   statusMessage(storageError?`El plano y sus propiedades se eliminaron, pero no se pudo borrar el archivo almacenado: ${storageError.message}`:'Plano y propiedades eliminados.');
  }
- function newProperty(){
-  const project=projectById(),plan=planById();
-  if(!project||!plan)return;
-  const sequence=state.units.filter(unit=>unit.plan_id===plan.id).length+1;
-  state.draft=emptyProperty(project,plan,sequence);
-  state.selectedId='draft';
-  state.drawing=false;
-  state.drawPoints=[];
-  renderInspector();
-  renderDrawTools();
-  renderSvg();
- }
  function renderInspector(){
   const container=$('[data-role="inspector"]');
-  const unit=state.draft||selectedUnit();
+  const unit=selectedUnit();
   if(!unit){
    container.innerHTML='<h2>Ficha de propiedad</h2><p>Elige una figura del plano para consultar sus datos.</p>';
    return;
@@ -535,29 +677,57 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   }
   fields.push(field('price','Precio (S/)',unit.price,'number','0.01'));
   fields.push(`<label>Observaciones<textarea name="observations" ${editable?'':'readonly'}>${attr(unit.observations||'')}</textarea></label>`);
-  const geometry=unit.geometry?.coordinates?.[0]||[];
-  const pdfLabel=unit.property_type==='Lote'&&state.scene?.background==='pdf'
-   ?state.scene.labels.find(label=>label.code===unit.code)
-   :null;
-  container.innerHTML=`<h2>${unit.id?'Propiedad':'Nueva propiedad'}</h2><p class="plans-property-kind">${attr(unit.property_type)} · ${attr(planById()?.name||'')}</p><form data-form="property">${fields.join('')}${editable?`<div class="plans-edit-actions"><button type="submit">Guardar cambios</button><button type="button" data-action="draw">${geometry.length?'Redibujar contorno':'Dibujar contorno'}</button>${pdfLabel&&unit.geometry?.type!=='Point'?'<button type="button" data-action="restore-pdf-marker">Restaurar marcador PDF</button>':''}${unit.id?'<button type="button" data-action="delete" class="danger">Eliminar</button>':''}</div>`:''}</form>`;
+  container.innerHTML=`<h2>${unit.id?'Propiedad':'Nueva propiedad'}</h2><p class="plans-property-kind">${attr(unit.property_type)} · ${attr(planById()?.name||'')}</p><form data-form="property">${fields.join('')}${editable?`<div class="plans-edit-actions"><button type="submit">Guardar cambios</button>${unit.id?'<button type="button" data-action="delete" class="danger">Eliminar</button>':''}</div>`:''}</form>${renderFinancing(unit)}`;
   const form=container.querySelector('[data-form="property"]');
   if(editable){
    form.onsubmit=event=>saveProperty(event).catch(error=>statusMessage(`No se pudieron guardar los cambios: ${error.message}`));
    form.querySelector('[name="status"]').onchange=()=>{updateDraftFromForm(form);renderPropertyList();renderSvg()};
    form.querySelector('[name="property_type"]').onchange=()=>{updateDraftFromForm(form);renderInspector()};
-   form.querySelector('[data-action="draw"]').onclick=()=>{updateDraftFromForm(form);state.drawing=true;state.drawPoints=[];renderDrawTools();renderSvg();statusMessage('Pulsa los puntos del contorno en el plano y termina en Cerrar contorno.')};
-   form.querySelector('[data-action="restore-pdf-marker"]')?.addEventListener('click',()=>{
-    updateDraftFromForm(form);
-    unit.geometry={type:'Point',coordinates:[pdfLabel.x,pdfLabel.y]};
-    renderInspector();
-    renderSvg();
-    statusMessage('Marcador devuelto a la etiqueta original del PDF. Guarda los cambios para sincronizarlo.');
-   });
    form.querySelector('[data-action="delete"]')?.addEventListener('click',()=>deleteProperty().catch(error=>statusMessage(`No se pudo eliminar la propiedad: ${error.message}`)));
   }
+  container.querySelectorAll('[data-quote-field]').forEach(input=>input.addEventListener('input',()=>{
+   const values=quoteValues(unit);
+   values[input.dataset.quoteField]=input.type==='number'?numberValue(input.value):input.value;
+   renderFinanceSummary(container,unit);
+  }));
+  container.querySelectorAll('[data-quote-mode]').forEach(button=>button.addEventListener('click',()=>{
+   state.quoteModes.set(quoteKey(unit),button.dataset.quoteMode);
+   renderInspector();
+  }));
+  renderFinanceSummary(container,unit);
+ }
+ function renderFinancing(unit){
+  const values=quoteValues(unit),mode=state.quoteModes.get(quoteKey(unit))||'financed';
+  return `<section class="unit-financing"><div class="quote-tabs"><button type="button" data-quote-mode="cash" class="${mode==='cash'?'active':''}">Contado</button><button type="button" data-quote-mode="financed" class="${mode==='financed'?'active':''}">Financiado</button></div><div data-role="quote-content" ${mode==='cash'?'hidden':''}><p class="quote-list-price">Precio de lista <strong>${attr(formatPrice(unit.price))}</strong></p><p class="quote-note">Financiamiento referencial sin descuento ni intereses.</p><label>Inicial (%) <input data-quote-field="initialPercent" type="number" min="0" max="100" step="1" value="${attr(values.initialPercent)}"></label><p class="quote-hint">Sugerida 30%, negociable</p><label>N.º de cuotas (máximo 36) <input data-quote-field="installments" type="number" min="1" max="36" step="1" value="${attr(values.installments)}"></label><label>Fecha de pago de la inicial <input data-quote-field="initialDate" type="date" value="${attr(values.initialDate)}"></label><label>Separación (S/) <input data-quote-field="separation" type="number" min="0" max="${attr(unit.price??0)}" step="100" value="${attr(values.separation)}"></label><div class="quote-totals"><p>Inicial requerida <strong data-quote-result="initial-percent"></strong></p><p>Separación abonada <strong data-quote-result="separation"></strong></p><p>Saldo de inicial <strong data-quote-result="initial"></strong></p><p>Precio final <strong data-quote-result="final-price"></strong></p><p>Monto a financiar <strong data-quote-result="financed"></strong></p></div><p class="quote-monthly"><span data-quote-result="monthly-title"></span><strong data-quote-result="monthly"></strong></p><p class="quote-note">Cálculo referencial. Verifica las condiciones con un asesor.</p><div class="quote-schedule"><strong>Cronograma de pagos</strong><table><thead><tr><th>Cuota</th><th>Fecha</th><th>Monto</th><th>Saldo</th></tr></thead><tbody data-role="quote-schedule"></tbody></table></div></div><div data-role="quote-cash" ${mode==='cash'?'':'hidden'}><p class="quote-list-price">Precio de contado <strong>${attr(formatPrice(unit.price))}</strong></p><p class="quote-note">Pago único. Confirma el precio vigente con un asesor.</p></div></section>`;
+ }
+ function renderFinanceSummary(container,unit){
+  const values=quoteValues(unit),quote=calculateFinancing({price:unit.price,initialPercent:values.initialPercent,separation:values.separation,installments:values.installments});
+  const result=(name,value)=>{const target=container.querySelector(`[data-quote-result="${name}"]`);if(target)target.textContent=value};
+  const invalidPrice=unit.price==null||!Number.isFinite(Number(unit.price));
+  const date=new Date(`${values.initialDate||new Date().toISOString().slice(0,10)}T12:00:00`);
+  const showAmount=amount=>invalidPrice?'Consultar':formatPrice(amount);
+  result('initial',showAmount(quote.initialDue));
+  result('initial-percent',`${quote.percent}% · ${showAmount(quote.initialAmount)}`);
+  result('separation',showAmount(quote.separationAmount));
+  result('final-price',showAmount(quote.finalPrice));
+  result('financed',showAmount(quote.financedAmount));
+  result('monthly-title',`Cuota mensual (× ${quote.installmentCount})`);
+  result('monthly',showAmount(quote.monthlyAmount));
+  container.querySelector('[data-quote-field="separation"]')?.setAttribute('max',String(quote.initialAmount));
+  const schedule=container.querySelector('[data-role="quote-schedule"]');
+  if(!schedule)return;
+  const rows=[{label:'Saldo de inicial',date:values.initialDate,amount:quote.initialDue,balance:quote.financedAmount}];
+  for(let index=0;index<quote.installmentCount;index++){
+   const due=new Date(date),day=date.getDate();
+   due.setDate(1);due.setMonth(due.getMonth()+index+1);
+   due.setDate(Math.min(day,new Date(due.getFullYear(),due.getMonth()+1,0).getDate()));
+   rows.push({label:`Cuota ${index+1}`,date:due.toLocaleDateString('es-PE'),amount:quote.monthlyAmount,balance:Math.max(0,quote.financedAmount-quote.monthlyAmount*(index+1))});
+  }
+  schedule.innerHTML=invalidPrice?'<tr><td colspan="4">Precio pendiente de registro</td></tr>':rows.map(row=>`<tr><td>${attr(row.label)}</td><td>${attr(row.date||'')}</td><td>${attr(formatPrice(row.amount))}</td><td>${attr(formatPrice(row.balance))}</td></tr>`).join('');
+  container.querySelectorAll('[data-quote-field="installments"]').forEach(input=>input.setCustomValidity(Number(input.value)>36?'El máximo permitido es 36 cuotas.':''));
  }
  function updateDraftFromForm(form){
-  const data=new FormData(form),unit=state.draft||selectedUnit();
+  const data=new FormData(form),unit=selectedUnit();
   if(!unit)return;
   if(state.projectId==='joya-verde')unit.block=null;
   for(const [key,value] of data){
@@ -568,13 +738,13 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
  async function saveProperty(event){
   event.preventDefault();
   if(!getIsAdmin())throw new Error('Solo administradores pueden editar propiedades.');
-  const form=event.currentTarget,unit=state.draft||selectedUnit();
+  const form=event.currentTarget,unit=selectedUnit();
   updateDraftFromForm(form);
   if(!unit?.code.trim())return statusMessage('El código de la propiedad es obligatorio.');
   const coordinates=unit.geometry?.coordinates;
   const hasPolygon=unit.geometry?.type==='Polygon'&&Array.isArray(coordinates?.[0])&&coordinates[0].length>=3;
   const hasPoint=unit.geometry?.type==='Point'&&Array.isArray(coordinates)&&coordinates.length===2&&coordinates.every(Number.isFinite);
-  if(!hasPolygon&&!hasPoint)return statusMessage('Dibuja y cierra el contorno de la propiedad antes de guardar.');
+  if(!hasPolygon&&!hasPoint)return statusMessage('La unidad no tiene geometría detectada en el plano; carga un PDF o DXF con su contorno para poder guardarla.');
   const record={...unit,geometry:unit.geometry,created_by:unit.created_by||getUser()?.id||null};
   delete record.id;
   delete record.owner;
@@ -586,12 +756,11 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   state.units=state.units.filter(item=>item.id!==saved.id);
   state.units.push(saved);
   state.selectedId=saved.id;
-  state.draft=null;
   renderPropertyList();renderSvg();renderInspector();
   renderPropertyList();
   renderInspector();
   renderSvg();
-  statusMessage('Propiedad y contorno guardados en Supabase.');
+  statusMessage('Propiedad y geometría guardadas en Supabase.');
  }
  async function deleteProperty(){
   const unit=selectedUnit();
@@ -612,20 +781,13 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   const viewport=sceneViewport(state.scene);
   svg.setAttribute('viewBox',`${viewport.x} ${viewport.y} ${viewport.width} ${viewport.height}`);
   const dxfLabels=state.scene.background==='dxf'?state.scene.labels.filter(label=>(/^\d+$/.test(label.text)&&label.layer==='VIVIENDA')||(/^[AB]$/i.test(label.text)&&label.layer==='MANZANAS')).map(label=>`<text x="${label.position[0]}" y="${label.position[1]}" text-anchor="middle" dominant-baseline="central">${attr(label.text)}</text>`).join(''):'';
-  svg.innerHTML=`${state.scene.background==='dxf'?`<g class="dxf-background">${state.scene.paths}</g><g class="dxf-labels">${dxfLabels}</g>`:''}<g class="property-shapes">${state.units.filter(unit=>unit.plan_id===state.planId).sort(comparePropertyCodes).map(renderPropertyShape).join('')}${state.draft?renderPolygon(state.draft):''}</g><g class="drawing-points">${state.drawPoints.length?`<polyline points="${state.drawPoints.map(point=>point.join(',')).join(' ')}"></polyline>${state.drawPoints.map(([x,y])=>`<circle cx="${x}" cy="${y}" r="${Math.max(viewport.width,viewport.height)*.006}"></circle>`).join('')}`:''}</g>`;
-  svg.onclick=event=>{
-   if(!state.drawing)return;
-   const point=svgPoint(svg,event);
-   state.drawPoints.push(point);
-   renderSvg();
-  };
+  svg.innerHTML=`${state.scene.background==='dxf'?`<g class="dxf-background">${state.scene.paths}</g><g class="dxf-labels">${dxfLabels}</g>`:''}<g class="property-shapes">${filteredPlanUnits().map(renderPropertyShape).join('')}</g>`;
   svg.querySelectorAll('[data-property-id]').forEach(shape=>shape.onclick=event=>{
-   if(state.drawing)return;
    event.stopPropagation();
    selectUnit(shape.dataset.propertyId);
   });
   svg.querySelectorAll('[data-property-id]').forEach(shape=>shape.onkeydown=event=>{
-   if(!state.drawing&&(event.key==='Enter'||event.key===' ')){
+   if(event.key==='Enter'||event.key===' '){
     event.preventDefault();
     selectUnit(shape.dataset.propertyId);
    }
@@ -656,39 +818,18 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   }
   return renderPolygon(unit);
  }
- function svgPoint(svg,event){
-  const point=svg.createSVGPoint();
-  point.x=event.clientX;point.y=event.clientY;
-  const converted=point.matrixTransform(svg.getScreenCTM().inverse());
-  const viewport=sceneViewport(state.scene);
-  return[Math.max(viewport.x,Math.min(viewport.x+viewport.width,converted.x)),Math.max(viewport.y,Math.min(viewport.y+viewport.height,converted.y))];
- }
- function renderDrawTools(){
-  const tools=$('[data-role="draw-tools"]');
+ function renderMapTools(){
+  const tools=$('[data-role="map-tools"]');
   if(!planById()||!state.scene){tools.innerHTML='';return}
-  if(!getIsAdmin()){tools.innerHTML='<span>Verde: disponible · Amarillo: reservado · Rojo: vendido · Morado: bloqueado</span>';return}
+  if(!getIsAdmin()){tools.innerHTML='<span>Verde: disponible · Amarillo: reservado · Rojo: vendido · Gris: bloqueado</span>';return}
   const plan=planById(),project=projectById();
   const pdfLots=state.scene.background==='pdf'?state.scene.labels:[];
   const existingLotCodes=new Set(state.units.filter(unit=>unit.plan_id===plan.id&&unit.property_type==='Lote').map(unit=>unit.code));
   const importablePdfLots=pdfLots.filter(lot=>!existingLotCodes.has(lot.code));
   const isSicayaPlan=isHuertasSicayaPlan(project,plan);
-  tools.innerHTML=`${state.drawing?'<button type="button" data-action="finish-drawing">Cerrar contorno</button><button type="button" data-action="cancel-drawing">Cancelar</button>':''}${plan.source_type==='dxf'&&state.scene.polygons.length&&!isSicayaPlan?`<button type="button" data-action="import-contours">Importar ${state.scene.polygons.length} contornos DXF</button>`:''}${isSicayaPlan?`<span>${state.scene.huertasLotCount||0} de 14 lotes oficiales detectados por manzana, número y área.</span>`:''}${importablePdfLots.length?`<button type="button" data-action="import-pdf-lots">Importar ${importablePdfLots.length} lotes numerados detectados</button>`:pdfLots.length?`<span>${pdfLots.length} lotes numerados detectados.</span>`:''}`;
-  tools.querySelector('[data-action="finish-drawing"]')?.addEventListener('click',finishDrawing);
-  tools.querySelector('[data-action="cancel-drawing"]')?.addEventListener('click',()=>{state.drawing=false;state.drawPoints=[];renderDrawTools();renderSvg()});
+  tools.innerHTML=`<span>Verde: disponible · Amarillo: reservado · Rojo: vendido · Gris: bloqueado</span>${plan.source_type==='dxf'&&state.scene.polygons.length&&!isSicayaPlan?`<button type="button" data-action="import-contours">Importar ${state.scene.polygons.length} contornos DXF detectados</button>`:''}${isSicayaPlan?`<span>${state.scene.huertasLotCount||0} de 14 lotes oficiales detectados por manzana, número y área.</span>`:''}${importablePdfLots.length?`<button type="button" data-action="import-pdf-lots">Importar ${importablePdfLots.length} lotes numerados detectados</button>`:pdfLots.length?`<span>${pdfLots.length} lotes numerados detectados.</span>`:''}`;
   tools.querySelector('[data-action="import-contours"]')?.addEventListener('click',()=>importDxfContours().catch(error=>statusMessage(`No se pudieron importar los contornos: ${error.message}`)));
   tools.querySelector('[data-action="import-pdf-lots"]')?.addEventListener('click',()=>importPdfLots().catch(error=>statusMessage(`No se pudieron importar los lotes del PDF: ${error.message}`)));
- }
- function finishDrawing(){
-  if(state.drawPoints.length<3){statusMessage('Un contorno necesita al menos tres puntos.');return}
-  const unit=state.draft||selectedUnit();
-  if(!unit)return;
-  unit.geometry={type:'Polygon',coordinates:[[...state.drawPoints]]};
-  state.drawing=false;
-  state.drawPoints=[];
-  renderDrawTools();
-  renderSvg();
-  renderInspector();
-  statusMessage('Contorno listo. Guarda los cambios para sincronizarlo.');
  }
  async function importDxfContours(){
   const plan=planById(),project=projectById();
@@ -702,7 +843,7 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   const {data,error}=await getSupabase().from('property_units').insert(records).select();
   if(error){statusMessage(`No se pudieron importar los contornos: ${error.message}`);return}
   state.units.push(...data);
-  renderPropertyList();renderSvg();renderDrawTools();
+  renderPropertyList();renderSvg();renderMapTools();
   statusMessage(`Se importaron ${data.length} contornos. Completa los códigos, medidas oficiales y precios.`);
  }
  async function importHuertasSicayaLots(){
@@ -725,7 +866,7 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   const {data,error}=await getSupabase().from('property_units').insert(records).select();
   if(error)throw new Error(error.message);
   state.units.push(...data);
-  renderPropertyList();renderInspector();renderSvg();renderDrawTools();
+  renderPropertyList();renderInspector();renderSvg();renderMapTools();
   statusMessage(`Se importaron ${data.length} de los 14 lotes oficiales de LAS HUERTAS DE SICAYA con sus contornos DXF, áreas, precios y estados.`);
  }
  async function importPdfLots(){
@@ -742,14 +883,14 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   const {data,error}=await getSupabase().from('property_units').insert(records).select();
   if(error)throw new Error(error.message);
   state.units.push(...data);
-  renderPropertyList();renderInspector();renderSvg();renderDrawTools();
+  renderPropertyList();renderInspector();renderSvg();renderMapTools();
   statusMessage(`Se importaron ${data.length} lotes numerados desde el PDF. Las áreas con discrepancias quedan pendientes de validar; el estado y el precio no se inventaron.`);
  }
 
  function bindPan(){
   const pan=$('[data-role="pan"]');
   pan.addEventListener('pointerdown',event=>{
-   if(state.drawing||event.target.closest('.plan-unit'))return;
+   if(event.target.closest('.plan-unit'))return;
    state.drag={x:event.clientX-state.panX,y:event.clientY-state.panY,pointerId:event.pointerId};
    pan.setPointerCapture(event.pointerId);
   });
