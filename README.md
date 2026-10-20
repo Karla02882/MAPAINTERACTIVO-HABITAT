@@ -63,6 +63,8 @@ Al abrir **Planos**, cada proyecto abre automáticamente el plano que se selecci
 
 Para asociar el PDF adjunto a **JOYA VERDE**, aplica primero la migración, inicia sesión como administrador, abre la ficha de JOYA VERDE y pulsa **Ver plano interactivo**. En **Agregar plano PDF/DXF**, el proyecto queda asociado automáticamente; selecciona `LA AUVERNIA LOTIZACION (1)-Model.octubre.pdf`, indica un nombre para el plano y la página PDF, y guárdalo. Ese archivo concreto detecta e importa automáticamente sus lotes numerados y áreas legibles al guardarse; también se pueden importar manualmente los lotes detectados desde cualquier otro PDF. Quedará en el almacenamiento central de Supabase y se abrirá al seleccionar JOYA VERDE desde cualquier dispositivo.
 
+Para **LAS HUERTAS DE SICAYA**, selecciona el proyecto y sube el archivo `Lotizacion Sicaya Las Huertas.dxf`. El lector conserva las capas y etiquetas de texto, encuadra el grupo de manzanas A y B y, para ese archivo, relaciona los contornos con los 14 lotes oficiales por manzana, número y área. Al abrirlo como administrador, importa las áreas, precios y estados proporcionados; las medidas de contorno calculadas no sustituyen las áreas oficiales. Los lotes quedan asociados al plano en Supabase y se muestran sobre el dibujo con su número y estado.
+
 Para probarlo:
 
 1. Aplica la migración SQL y recarga el sitio.

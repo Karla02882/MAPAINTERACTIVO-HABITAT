@@ -1,6 +1,23 @@
 const BUCKET='project-files';
 const PDFJS_VERSION='4.10.38';
 const PROPERTY_TYPES=['Lote','Casa','Departamento'];
+const HUERTAS_SICAYA_DXF='Lotizacion Sicaya Las Huertas.dxf';
+const HUERTAS_SICAYA_LOTS=[
+ {block:'A',number:7,area:90.01,price:35000,status:'sold'},
+ {block:'A',number:4,area:90.29,price:35000,status:'available'},
+ {block:'B',number:7,area:90.93,price:35000,status:'blocked'},
+ {block:'B',number:3,area:90.27,price:41000,status:'sold'},
+ {block:'B',number:4,area:90.66,price:35000,status:'available'},
+ {block:'B',number:5,area:90.88,price:30000,status:'available'},
+ {block:'A',number:1,area:94.25,price:42000,status:'available'},
+ {block:'A',number:5,area:90.67,price:30000,status:'available'},
+ {block:'A',number:6,area:90.28,price:25000,status:'available'},
+ {block:'B',number:6,area:91.7,price:39000,status:'sold'},
+ {block:'B',number:2,area:104.85,price:50000,status:'available'},
+ {block:'A',number:2,area:103.98,price:50000,status:'available'},
+ {block:'A',number:3,area:90.51,price:35000,status:'available'},
+ {block:'B',number:1,area:100.79,price:44000,status:'available'}
+];
 const PROPERTY_STATUS={
  available:{label:'Disponible',color:'#34C759'},
  reserved:{label:'Reservado',color:'#FFCC00'},
@@ -28,15 +45,17 @@ export function parseDxf(source){
   const kind=pairs[i][1],data=[];
   i++;
   while(i<end&&pairs[i][0]!==0)data.push(pairs[i++]);
+  const layer=data.find(([code])=>code===8)?.[1]||'0';
   if(kind==='LWPOLYLINE'){
    const points=[];
    for(let j=0;j<data.length;j++){
     if(data[j][0]===10){
-     const y=data.slice(j+1).find(([code])=>code===20)?.[1];
-     if(y!==undefined)points.push([Number(data[j][1]),Number(y)]);
+     const y=data.slice(j+1).find(([code])=>code===20||code===10);
+     const yValue=y?.[0]===20?y[1]:undefined;
+     if(yValue!==undefined)points.push([Number(data[j][1]),Number(yValue)]);
     }
    }
-   if(points.length>1)entities.push({type:'polyline',points,closed:(Number(data.find(([code])=>code===70)?.[1]||0)&1)===1});
+   if(points.length>1)entities.push({type:'polyline',layer,points,closed:(Number(data.find(([code])=>code===70)?.[1]||0)&1)===1});
   }else if(kind==='POLYLINE'){
    const points=[];
    let closed=(Number(data.find(([code])=>code===70)?.[1]||0)&1)===1;
@@ -48,27 +67,35 @@ export function parseDxf(source){
     if(x!==undefined&&y!==undefined)points.push([Number(x),Number(y)]);
    }
    if(i<end&&pairs[i][0]===0&&pairs[i][1]==='SEQEND')i++;
-   if(points.length>1)entities.push({type:'polyline',points,closed});
+   if(points.length>1)entities.push({type:'polyline',layer,points,closed});
   }else if(kind==='LINE'){
    const x1=data.find(([code])=>code===10)?.[1],y1=data.find(([code])=>code===20)?.[1];
    const x2=data.find(([code])=>code===11)?.[1],y2=data.find(([code])=>code===21)?.[1];
-   if([x1,y1,x2,y2].every(value=>value!==undefined))entities.push({type:'line',points:[[Number(x1),Number(y1)],[Number(x2),Number(y2)]],closed:false});
+   if([x1,y1,x2,y2].every(value=>value!==undefined))entities.push({type:'line',layer,points:[[Number(x1),Number(y1)],[Number(x2),Number(y2)]],closed:false});
   }else if(kind==='CIRCLE'){
    const x=data.find(([code])=>code===10)?.[1],y=data.find(([code])=>code===20)?.[1],r=data.find(([code])=>code===40)?.[1];
-   if([x,y,r].every(value=>value!==undefined))entities.push({type:'circle',center:[Number(x),Number(y)],radius:Number(r)});
+   if([x,y,r].every(value=>value!==undefined))entities.push({type:'circle',layer,center:[Number(x),Number(y)],radius:Number(r)});
+  }else if(kind==='TEXT'||kind==='MTEXT'){
+   const text=data.filter(([code])=>code===1||code===3).map(([,value])=>value).join('').replace(/\\P/g,' ').trim();
+   const x=data.find(([code])=>code===10)?.[1],y=data.find(([code])=>code===20)?.[1];
+   if(text&&x!==undefined&&y!==undefined)entities.push({type:'text',layer,text,position:[Number(x),Number(y)]});
   }
  }
  const coordinates=entities.flatMap(entity=>entity.type==='circle'?[
   [entity.center[0]-entity.radius,entity.center[1]-entity.radius],
   [entity.center[0]+entity.radius,entity.center[1]+entity.radius]
- ]:entity.points);
+ ]:entity.points||[]);
  if(!coordinates.length)throw new Error('No se encontraron contornos, líneas o círculos compatibles en el DXF.');
  const minX=Math.min(...coordinates.map(point=>point[0])),maxX=Math.max(...coordinates.map(point=>point[0]));
  const minY=Math.min(...coordinates.map(point=>point[1])),maxY=Math.max(...coordinates.map(point=>point[1]));
  const width=maxX-minX||1,height=maxY-minY||1;
  const mapPoint=([x,y])=>[x-minX,maxY-y];
- const paths=[],polygons=[];
+ const paths=[],polygons=[],labels=[];
  entities.forEach(entity=>{
+  if(entity.type==='text'){
+   labels.push({layer:entity.layer,text:entity.text,position:mapPoint(entity.position)});
+   return;
+  }
   if(entity.type==='circle'){
    const [x,y]=mapPoint(entity.center);
    paths.push(`<circle cx="${x}" cy="${y}" r="${entity.radius}" />`);
@@ -77,9 +104,62 @@ export function parseDxf(source){
   const points=entity.points.map(mapPoint);
   const d=points.map(([x,y],index)=>`${index?'L':'M'}${x} ${y}`).join(' ')+(entity.closed?' Z':'');
   paths.push(`<path d="${d}" />`);
-  if(entity.closed&&points.length>=3)polygons.push(points);
+  if(entity.closed&&points.length>=3){
+   const area=Math.abs(points.reduce((sum,[x,y],index)=>{
+    const [nextX,nextY]=points[(index+1)%points.length];
+    return sum+x*nextY-nextX*y;
+   },0))/2;
+   polygons.push({layer:entity.layer,points,area});
+  }
  });
- return{width,height,paths:paths.join(''),polygons};
+ return{width,height,paths:paths.join(''),polygons,labels};
+}
+
+function sceneViewport(scene){
+ return scene.viewBox||{x:0,y:0,width:scene.width,height:scene.height};
+}
+
+export function matchHuertasSicayaLots(scene){
+ const parcelPolygons=scene.polygons.filter(polygon=>polygon.layer==='VIVIENDA');
+ const lotLabels=scene.labels.filter(label=>label.layer==='VIVIENDA'&&/^\d+$/.test(label.text));
+ const blockLabels=scene.labels.filter(label=>label.layer==='MANZANAS'&&/^[AB]$/i.test(label.text));
+ const centroid=points=>points.reduce((sum,[x,y])=>[sum[0]+x/points.length,sum[1]+y/points.length],[0,0]);
+ const distance=(first,second)=>Math.hypot(first[0]-second[0],first[1]-second[1]);
+ const eligible=HUERTAS_SICAYA_LOTS.map(lot=>parcelPolygons.map(polygon=>{
+   const center=centroid(polygon.points);
+   const matchingNumber=lotLabels.map(label=>({label,distance:distance(center,label.position)}))
+    .filter(match=>Number(match.label.text)===lot.number&&match.distance<=3)
+    .sort((first,second)=>first.distance-second.distance)[0];
+   if(Math.abs(polygon.area-lot.area)>.02||!matchingNumber)return null;
+   return{polygon,center,score:Math.abs(polygon.area-lot.area)+matchingNumber.distance*.001};
+  }).filter(Boolean));
+ const anchorIndex=HUERTAS_SICAYA_LOTS.findIndex(lot=>lot.block==='A'&&lot.number===1);
+ for(const anchor of eligible[anchorIndex]){
+  const nearestBlock=letter=>blockLabels.filter(label=>label.text.toUpperCase()===letter)
+   .map(label=>({label,distance:distance(anchor.center,label.position)}))
+   .sort((first,second)=>first.distance-second.distance)[0];
+  const blockA=nearestBlock('A'),blockB=nearestBlock('B');
+  if(!blockA||!blockB||blockA.distance>60||blockB.distance>60)continue;
+  const deltaX=blockB.label.position[0]-blockA.label.position[0];
+  const deltaY=blockB.label.position[1]-blockA.label.position[1];
+  const midpoint=blockA.label.position.map((value,index)=>(value+blockB.label.position[index])/2);
+  const isBlockA=center=>Math.abs(deltaX)>=Math.abs(deltaY)
+   ?(center[0]-midpoint[0])*deltaX<0
+   :(center[1]-midpoint[1])*deltaY<0;
+  const selected=[],used=new Set();
+  let complete=true;
+  for(let index=0;index<eligible.length;index++){
+   const matches=eligible[index],lot=HUERTAS_SICAYA_LOTS[index];
+   const candidate=matches
+    .filter(match=>!used.has(match.polygon)&&distance(anchor.center,match.center)<=55&&isBlockA(match.center)===(lot.block==='A'))
+    .sort((first,second)=>first.score-second.score)[0];
+   if(!candidate){complete=false;break}
+   selected.push(candidate.polygon);
+   used.add(candidate.polygon);
+  }
+  if(complete)return HUERTAS_SICAYA_LOTS.map((lot,index)=>({lot,polygon:selected[index]}));
+ }
+ return[];
 }
 
 export function parsePdfLotLabels(textContent,viewport,transformPoint){
@@ -283,6 +363,10 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
      else{plan.source_width=state.scene.width;plan.source_height=state.scene.height}
     }
    }
+   if(projectById()?.id==='las-huertas-de-sicaya'&&plan.file_name===HUERTAS_SICAYA_DXF){
+    try{await importHuertasSicayaLots()}
+    catch(error){statusMessage(`El plano se abrió, pero no se pudieron importar los lotes: ${error.message}`)}
+   }
   }catch(error){
    state.loadingPlan=false;
    $('.plans-stage-message').textContent=`No se pudo abrir el plano: ${error.message}`;
@@ -315,9 +399,20 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   const response=await fetch(publicPlanUrl(plan));
   if(!response.ok)throw new Error(`El archivo DXF no pudo descargarse (HTTP ${response.status}).`);
   const scene=parseDxf(await response.text());
+  if(projectById()?.id==='las-huertas-de-sicaya'&&plan.file_name===HUERTAS_SICAYA_DXF){
+   const lots=matchHuertasSicayaLots(scene);
+   scene.huertasLotCount=lots.length;
+   if(lots.length===HUERTAS_SICAYA_LOTS.length){
+    const points=lots.flatMap(({polygon})=>polygon.points);
+    const xs=points.map(([x])=>x),ys=points.map(([,y])=>y),padding=18;
+    const left=Math.max(0,Math.min(...xs)-padding),top=Math.max(0,Math.min(...ys)-padding);
+    const right=Math.min(scene.width,Math.max(...xs)+padding),bottom=Math.min(scene.height,Math.max(...ys)+padding);
+    scene.viewBox={x:left,y:top,width:right-left,height:bottom-top};
+   }
+  }
   state.scene={...scene,background:'dxf'};
   $('[data-role="pdf-canvas"]').hidden=true;
- }
+  }
 
  function renderPropertyList(){
   const query=$('[data-field="search"]').value.trim().toLocaleLowerCase('es');
@@ -509,8 +604,10 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
  function renderSvg(){
   const svg=$('[data-role="plan-svg"]');
   if(!state.scene){svg.replaceChildren();return}
-  svg.setAttribute('viewBox',`0 0 ${state.scene.width} ${state.scene.height}`);
-  svg.innerHTML=`${state.scene.background==='dxf'?`<g class="dxf-background">${state.scene.paths}</g>`:''}<g class="property-shapes">${state.units.filter(unit=>unit.plan_id===state.planId).sort(comparePropertyCodes).map(renderPropertyShape).join('')}${state.draft?renderPolygon(state.draft):''}</g><g class="drawing-points">${state.drawPoints.length?`<polyline points="${state.drawPoints.map(point=>point.join(',')).join(' ')}"></polyline>${state.drawPoints.map(([x,y])=>`<circle cx="${x}" cy="${y}" r="${Math.max(state.scene.width,state.scene.height)*.006}"></circle>`).join('')}`:''}</g>`;
+  const viewport=sceneViewport(state.scene);
+  svg.setAttribute('viewBox',`${viewport.x} ${viewport.y} ${viewport.width} ${viewport.height}`);
+  const dxfLabels=state.scene.background==='dxf'?state.scene.labels.filter(label=>/^\d+$/.test(label.text)&&label.layer==='VIVIENDA'||/^[AB]$/i.test(label.text)&&label.layer==='MANZANAS').map(label=>`<text x="${label.position[0]}" y="${label.position[1]}" text-anchor="middle" dominant-baseline="central">${attr(label.text)}</text>`).join(''):'';
+  svg.innerHTML=`${state.scene.background==='dxf'?`<g class="dxf-background">${state.scene.paths}</g><g class="dxf-labels">${dxfLabels}</g>`:''}<g class="property-shapes">${state.units.filter(unit=>unit.plan_id===state.planId).sort(comparePropertyCodes).map(renderPropertyShape).join('')}${state.draft?renderPolygon(state.draft):''}</g><g class="drawing-points">${state.drawPoints.length?`<polyline points="${state.drawPoints.map(point=>point.join(',')).join(' ')}"></polyline>${state.drawPoints.map(([x,y])=>`<circle cx="${x}" cy="${y}" r="${Math.max(viewport.width,viewport.height)*.006}"></circle>`).join('')}`:''}</g>`;
   svg.onclick=event=>{
    if(!state.drawing)return;
    const point=svgPoint(svg,event);
@@ -539,7 +636,13 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   const selected=unit.id===state.selectedId;
   const labelPoint=points.reduce((sum,point)=>[sum[0]+point[0]/points.length,sum[1]+point[1]/points.length],[0,0]);
   const id=unit.id||'draft';
-  return `<g class="plan-unit ${selected?'selected':''}" data-property-id="${attr(id)}" tabindex="0" role="button" aria-label="${attr(unit.code)} · ${attr(PROPERTY_STATUS[unit.status]?.label||unit.status)}"><polygon points="${points.map(point=>point.map(Number).join(',')).join(' ')}" fill="${color}" fill-opacity="${selected?'.65':'.35'}" stroke="${selected?'#007AFF':color}" stroke-width="${Math.max(state.scene.width,state.scene.height)*.004}" vector-effect="non-scaling-stroke"></polygon><text x="${labelPoint[0]}" y="${labelPoint[1]}" text-anchor="middle" dominant-baseline="middle">${attr(unit.code)}</text></g>`;
+  const numberLabel=unit.code.match(/^LOTE\s+(\d+)\s+MZ\s+[AB]$/i)?.[1]||unit.code;
+  const viewport=sceneViewport(state.scene);
+  const strokeWidth=Math.max(viewport.width,viewport.height)*.004;
+  const fontSize=state.scene.background==='dxf'
+   ?state.scene.viewBox?Math.min(1.2,Math.max(.55,Math.min(viewport.width,viewport.height)*.012)):Math.min(9,Math.max(5,Math.min(viewport.width,viewport.height)*.012))
+   :2.2;
+  return `<g class="plan-unit ${selected?'selected':''}" data-property-id="${attr(id)}" tabindex="0" role="button" aria-label="${attr(unit.code)} · ${attr(PROPERTY_STATUS[unit.status]?.label||unit.status)}"><polygon points="${points.map(point=>point.map(Number).join(',')).join(' ')}" fill="${color}" fill-opacity="${selected?'.65':'.35'}" stroke="${selected?'#007AFF':color}" stroke-width="${strokeWidth}" vector-effect="non-scaling-stroke"></polygon><text x="${labelPoint[0]}" y="${labelPoint[1]}" style="font-size:${fontSize}px" text-anchor="middle" dominant-baseline="middle">${attr(numberLabel)}</text></g>`;
  }
  function renderPropertyShape(unit){
   if(unit.geometry?.type==='Point'&&Array.isArray(unit.geometry.coordinates)&&unit.geometry.coordinates.length===2){
@@ -552,17 +655,19 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   const point=svg.createSVGPoint();
   point.x=event.clientX;point.y=event.clientY;
   const converted=point.matrixTransform(svg.getScreenCTM().inverse());
-  return[Math.max(0,Math.min(state.scene.width,converted.x)),Math.max(0,Math.min(state.scene.height,converted.y))];
+  const viewport=sceneViewport(state.scene);
+  return[Math.max(viewport.x,Math.min(viewport.x+viewport.width,converted.x)),Math.max(viewport.y,Math.min(viewport.y+viewport.height,converted.y))];
  }
  function renderDrawTools(){
   const tools=$('[data-role="draw-tools"]');
   if(!planById()||!state.scene){tools.innerHTML='';return}
   if(!getIsAdmin()){tools.innerHTML='<span>Verde: disponible · Amarillo: reservado · Rojo: vendido · Morado: bloqueado</span>';return}
-  const plan=planById();
+  const plan=planById(),project=projectById();
   const pdfLots=state.scene.background==='pdf'?state.scene.labels:[];
   const existingLotCodes=new Set(state.units.filter(unit=>unit.plan_id===plan.id&&unit.property_type==='Lote').map(unit=>unit.code));
   const importablePdfLots=pdfLots.filter(lot=>!existingLotCodes.has(lot.code));
-  tools.innerHTML=`${state.drawing?'<button type="button" data-action="finish-drawing">Cerrar contorno</button><button type="button" data-action="cancel-drawing">Cancelar</button>':''}${plan.source_type==='dxf'&&state.scene.polygons.length?`<button type="button" data-action="import-contours">Importar ${state.scene.polygons.length} contornos DXF</button>`:''}${importablePdfLots.length?`<button type="button" data-action="import-pdf-lots">Importar ${importablePdfLots.length} lotes numerados detectados</button>`:pdfLots.length?`<span>${pdfLots.length} lotes numerados detectados.</span>`:''}`;
+  const isSicayaPlan=project?.id==='las-huertas-de-sicaya'&&plan?.file_name===HUERTAS_SICAYA_DXF;
+  tools.innerHTML=`${state.drawing?'<button type="button" data-action="finish-drawing">Cerrar contorno</button><button type="button" data-action="cancel-drawing">Cancelar</button>':''}${plan.source_type==='dxf'&&state.scene.polygons.length&&!isSicayaPlan?`<button type="button" data-action="import-contours">Importar ${state.scene.polygons.length} contornos DXF</button>`:''}${isSicayaPlan?`<span>${state.scene.huertasLotCount||0} de 14 lotes oficiales detectados por manzana, número y área.</span>`:''}${importablePdfLots.length?`<button type="button" data-action="import-pdf-lots">Importar ${importablePdfLots.length} lotes numerados detectados</button>`:pdfLots.length?`<span>${pdfLots.length} lotes numerados detectados.</span>`:''}`;
   tools.querySelector('[data-action="finish-drawing"]')?.addEventListener('click',finishDrawing);
   tools.querySelector('[data-action="cancel-drawing"]')?.addEventListener('click',()=>{state.drawing=false;state.drawPoints=[];renderDrawTools();renderSvg()});
   tools.querySelector('[data-action="import-contours"]')?.addEventListener('click',()=>importDxfContours().catch(error=>statusMessage(`No se pudieron importar los contornos: ${error.message}`)));
@@ -585,7 +690,7 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   if(!getIsAdmin()||!plan||!project||!state.scene?.polygons?.length)return;
   if(!window.confirm(`Crear ${state.scene.polygons.length} registros editables sin inventar códigos, áreas oficiales ni precios?`))return;
   const existing=state.units.filter(unit=>unit.plan_id===plan.id).length;
-  const records=state.scene.polygons.map((points,index)=>({
+  const records=state.scene.polygons.map(({points},index)=>({
    project_id:project.id,plan_id:plan.id,property_type:defaultType(project),code:`${defaultType(project)} ${existing+index+1}`,status:'available',
    geometry:{type:'Polygon',coordinates:[points]},created_by:getUser()?.id||null
   }));
@@ -594,6 +699,29 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   state.units.push(...data);
   renderPropertyList();renderSvg();renderDrawTools();
   statusMessage(`Se importaron ${data.length} contornos. Completa los códigos, medidas oficiales y precios.`);
+ }
+ async function importHuertasSicayaLots(){
+  const plan=planById(),project=projectById();
+  if(!getIsAdmin()||!plan||project?.id!=='las-huertas-de-sicaya'||plan.file_name!==HUERTAS_SICAYA_DXF||state.scene?.background!=='dxf')return;
+  const matches=matchHuertasSicayaLots(state.scene);
+  if(matches.length!==HUERTAS_SICAYA_LOTS.length){
+   throw new Error(`Se detectaron ${matches.length} de ${HUERTAS_SICAYA_LOTS.length} contornos coincidentes. Verifica que el archivo DXF corresponda a LAS HUERTAS DE SICAYA.`);
+  }
+  const existingCodes=new Set(state.units.filter(unit=>unit.plan_id===plan.id&&unit.property_type==='Lote').map(unit=>unit.code));
+  const records=matches.filter(({lot})=>!existingCodes.has(`LOTE ${lot.number} MZ ${lot.block}`)).map(({lot,polygon})=>({
+   project_id:project.id,plan_id:plan.id,property_type:'Lote',code:`LOTE ${lot.number} MZ ${lot.block}`,block:lot.block,
+   area_land_m2:lot.area,status:lot.status,price:lot.price,
+   geometry:{type:'Polygon',coordinates:[polygon.points]},created_by:getUser()?.id||null
+  }));
+  if(!records.length){
+   statusMessage(`Los ${matches.length} lotes oficiales de LAS HUERTAS DE SICAYA ya están importados.`);
+   return;
+  }
+  const {data,error}=await getSupabase().from('property_units').insert(records).select();
+  if(error)throw new Error(error.message);
+  state.units.push(...data);
+  renderPropertyList();renderInspector();renderSvg();renderDrawTools();
+  statusMessage(`Se importaron ${data.length} de los 14 lotes oficiales de LAS HUERTAS DE SICAYA con sus contornos DXF, áreas, precios y estados.`);
  }
  async function importPdfLots(){
   const plan=planById(),project=projectById();
@@ -636,13 +764,14 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
  function applyPanZoom(){
   const surface=$('[data-role="surface"]'),scene=state.scene;
   if(scene){
-   const pan=$('[data-role="pan"]'),width=pan.clientWidth,height=pan.clientHeight;
-   if(width&&height){
-    const fit=Math.min(width/scene.width,height/scene.height);
-    surface.style.width=`${scene.width*fit}px`;
-    surface.style.height=`${scene.height*fit}px`;
+    const viewport=sceneViewport(scene);
+    const pan=$('[data-role="pan"]'),width=pan.clientWidth,height=pan.clientHeight;
+    if(width&&height){
+     const fit=Math.min(width/viewport.width,height/viewport.height);
+     surface.style.width=`${viewport.width*fit}px`;
+     surface.style.height=`${viewport.height*fit}px`;
+    }
    }
-  }
   surface.style.transform=`translate(${state.panX}px,${state.panY}px) scale(${state.zoom})`;
  }
 
