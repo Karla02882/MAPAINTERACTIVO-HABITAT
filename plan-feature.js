@@ -5,12 +5,12 @@ const PROPERTY_STATUS={
  available:{label:'Disponible',color:'#34C759'},
  reserved:{label:'Reservado',color:'#FFCC00'},
  sold:{label:'Vendido',color:'#FF3B30'},
- blocked:{label:'Bloqueado',color:'#8E44AD'},
- unknown:{label:'Por confirmar',color:'#8E8E93'}
+ blocked:{label:'Bloqueado',color:'#8E44AD'}
 };
 const attr=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const slug=value=>value.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9._-]+/g,'-').replace(/^-+|-+$/g,'')||'plano';
 const numberValue=value=>value===''||value==null?null:Number(value);
+const comparePropertyCodes=(first,second)=>String(first.code).localeCompare(String(second.code),'es',{numeric:true,sensitivity:'base'});
 export function parseDxf(source){
  const rows=source.replace(/\r/g,'').split('\n');
  const pairs=[];
@@ -135,7 +135,7 @@ function defaultType(project){
  return'Casa';
 }
 function emptyProperty(project,plan,sequence=1){
- return{id:null,project_id:project.id,plan_id:plan.id,property_type:defaultType(project),code:`${defaultType(project)} ${sequence}`,block:'',address:'',location_label:'',building:'',tower:'',floor_label:plan.floor_label||'',area_land_m2:null,area_total_m2:null,area_covered_m2:null,other_areas_m2:null,frontage_m:null,back_m:null,side_a_m:null,side_b_m:null,floors:null,bedrooms:null,bathrooms:null,status:'unknown',price:null,observations:'',geometry:{type:'Polygon',coordinates:[]}};
+ return{id:null,project_id:project.id,plan_id:plan.id,property_type:defaultType(project),code:`${defaultType(project)} ${sequence}`,block:'',address:'',location_label:'',building:'',tower:'',floor_label:plan.floor_label||'',area_land_m2:null,area_total_m2:null,area_covered_m2:null,other_areas_m2:null,frontage_m:null,back_m:null,side_a_m:null,side_b_m:null,floors:null,bedrooms:null,bathrooms:null,status:'available',price:null,observations:'',geometry:{type:'Polygon',coordinates:[]}};
 }
 
 export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,onSelectProject}){
@@ -144,7 +144,7 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
  root.setAttribute('aria-label','Planos interactivos');
  root.innerHTML=`<header class="plans-header"><div><strong>Planos interactivos</strong><span>Selecciona una propiedad o administra su plano</span></div><button type="button" data-action="close">Volver al mapa</button></header>
  <div class="plans-toolbar"><label>Proyecto<select data-field="project"></select></label><label>Plano<select data-field="plan"></select></label><button type="button" data-action="zoom-out" aria-label="Reducir zoom">−</button><input data-field="zoom" type="range" min="0.5" max="4" step="0.1" value="1" aria-label="Zoom del plano"><button type="button" data-action="zoom-in" aria-label="Aumentar zoom">+</button><span data-role="zoom-label">100%</span></div>
- <div class="plans-layout"><aside class="plans-sidebar"><div class="plans-search"><label>Buscar propiedad<input data-field="search" type="search" placeholder="Código, manzana, torre, piso…"></label><label>Estado<select data-field="status-filter"><option value="">Todos los estados</option><option value="available">Disponible</option><option value="reserved">Reservado</option><option value="sold">Vendido</option><option value="blocked">Bloqueado</option><option value="unknown">Por confirmar</option></select></label></div><div class="plans-list" data-role="property-list"></div><div class="plans-admin-tools" data-role="admin-tools"></div></aside><div class="plans-stage"><div class="plans-stage-message" data-role="stage-message">Selecciona un proyecto y plano para comenzar.</div><div class="plans-pan" data-role="pan"><div class="plans-surface" data-role="surface"><canvas data-role="pdf-canvas"></canvas><svg data-role="plan-svg" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Plano interactivo"></svg></div></div><div class="plans-draw-tools" data-role="draw-tools"></div></div><aside class="plans-inspector" data-role="inspector"><h2>Ficha de propiedad</h2><p>Elige una figura del plano para consultar sus datos.</p></aside></div><p class="plans-status" role="status" aria-live="polite"></p>`;
+ <div class="plans-layout"><aside class="plans-sidebar"><div class="plans-search"><label>Buscar propiedad<input data-field="search" type="search" placeholder="Código, manzana, torre, piso…"></label><label>Estado<select data-field="status-filter"><option value="">Todos los estados</option><option value="available">Disponible</option><option value="reserved">Reservado</option><option value="sold">Vendido</option><option value="blocked">Bloqueado</option></select></label></div><div class="plans-list" data-role="property-list"></div><div class="plans-admin-tools" data-role="admin-tools"></div></aside><div class="plans-stage"><div class="plans-stage-message" data-role="stage-message">Selecciona un proyecto y plano para comenzar.</div><div class="plans-pan" data-role="pan"><div class="plans-surface" data-role="surface"><canvas data-role="pdf-canvas"></canvas><svg data-role="plan-svg" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Plano interactivo"></svg></div></div><div class="plans-draw-tools" data-role="draw-tools"></div></div><aside class="plans-inspector" data-role="inspector"><h2>Ficha de propiedad</h2><p>Elige una figura del plano para consultar sus datos.</p></aside></div><p class="plans-status" role="status" aria-live="polite"></p>`;
  document.body.append(root);
 
  const $=selector=>root.querySelector(selector);
@@ -213,7 +213,7 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   if(unitResult.error)throw new Error(`No se pudieron cargar las propiedades del plano: ${unitResult.error.message}`);
   if(state.projectId!==expectedProjectId||state.projectLoadSequence!==expectedSequence)return;
   state.plans=planResult.data||[];
-  state.units=unitResult.data||[];
+  state.units=(unitResult.data||[]).map(unit=>unit.status==='unknown'?{...unit,status:'available'}:unit).sort(comparePropertyCodes);
   renderPlanOptions();
   renderPropertyList();
   renderInspector();
@@ -324,7 +324,7 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   const status=$('[data-field="status-filter"]').value;
   const visible=state.units.filter(unit=>unit.plan_id===state.planId&&(!status||unit.status===status)&&(!query||[
    unit.code,unit.block,unit.address,unit.location_label,unit.building,unit.tower,unit.floor_label,unit.property_type
-  ].some(value=>String(value||'').toLocaleLowerCase('es').includes(query))));
+  ].some(value=>String(value||'').toLocaleLowerCase('es').includes(query)))).sort(comparePropertyCodes);
   $('[data-role="property-list"]').innerHTML=visible.length?visible.map(unit=>`<button type="button" class="plan-property ${unit.id===state.selectedId?'selected':''}" data-unit-id="${attr(unit.id)}"><i style="--property-color:${propertyColor(unit.status)}"></i><span><b>${attr(unit.code)}</b><small>${attr(unit.block?`Mz. ${unit.block} · `:'')}${attr(unit.floor_label||unit.tower||unit.property_type)} · ${attr(PROPERTY_STATUS[unit.status]?.label||unit.status)}</small></span></button>`).join(''):'<p class="plans-empty">No hay propiedades que coincidan con la búsqueda.</p>';
   $('[data-role="property-list"]').querySelectorAll('[data-unit-id]').forEach(button=>button.onclick=()=>selectUnit(button.dataset.unitId));
   renderSvg();
@@ -510,7 +510,7 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   const svg=$('[data-role="plan-svg"]');
   if(!state.scene){svg.replaceChildren();return}
   svg.setAttribute('viewBox',`0 0 ${state.scene.width} ${state.scene.height}`);
-  svg.innerHTML=`${state.scene.background==='dxf'?`<g class="dxf-background">${state.scene.paths}</g>`:''}<g class="property-shapes">${state.units.filter(unit=>unit.plan_id===state.planId).map(renderPropertyShape).join('')}${state.draft?renderPolygon(state.draft):''}</g><g class="drawing-points">${state.drawPoints.length?`<polyline points="${state.drawPoints.map(point=>point.join(',')).join(' ')}"></polyline>${state.drawPoints.map(([x,y])=>`<circle cx="${x}" cy="${y}" r="${Math.max(state.scene.width,state.scene.height)*.006}"></circle>`).join('')}`:''}</g>`;
+  svg.innerHTML=`${state.scene.background==='dxf'?`<g class="dxf-background">${state.scene.paths}</g>`:''}<g class="property-shapes">${state.units.filter(unit=>unit.plan_id===state.planId).sort(comparePropertyCodes).map(renderPropertyShape).join('')}${state.draft?renderPolygon(state.draft):''}</g><g class="drawing-points">${state.drawPoints.length?`<polyline points="${state.drawPoints.map(point=>point.join(',')).join(' ')}"></polyline>${state.drawPoints.map(([x,y])=>`<circle cx="${x}" cy="${y}" r="${Math.max(state.scene.width,state.scene.height)*.006}"></circle>`).join('')}`:''}</g>`;
   svg.onclick=event=>{
    if(!state.drawing)return;
    const point=svgPoint(svg,event);
@@ -557,7 +557,7 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
  function renderDrawTools(){
   const tools=$('[data-role="draw-tools"]');
   if(!planById()||!state.scene){tools.innerHTML='';return}
-  if(!getIsAdmin()){tools.innerHTML='<span>Verde: disponible · Amarillo: reservado · Rojo: vendido · Morado: bloqueado · Gris: por confirmar</span>';return}
+  if(!getIsAdmin()){tools.innerHTML='<span>Verde: disponible · Amarillo: reservado · Rojo: vendido · Morado: bloqueado</span>';return}
   const plan=planById();
   const pdfLots=state.scene.background==='pdf'?state.scene.labels:[];
   const existingLotCodes=new Set(state.units.filter(unit=>unit.plan_id===plan.id&&unit.property_type==='Lote').map(unit=>unit.code));
@@ -586,7 +586,7 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   if(!window.confirm(`Crear ${state.scene.polygons.length} registros editables sin inventar códigos, áreas oficiales ni precios?`))return;
   const existing=state.units.filter(unit=>unit.plan_id===plan.id).length;
   const records=state.scene.polygons.map((points,index)=>({
-   project_id:project.id,plan_id:plan.id,property_type:defaultType(project),code:`${defaultType(project)} ${existing+index+1}`,status:'unknown',
+   project_id:project.id,plan_id:plan.id,property_type:defaultType(project),code:`${defaultType(project)} ${existing+index+1}`,status:'available',
    geometry:{type:'Polygon',coordinates:[points]},created_by:getUser()?.id||null
   }));
   const {data,error}=await getSupabase().from('property_units').insert(records).select();
@@ -603,7 +603,7 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   if(!labels.length){statusMessage('Los lotes numerados de este plano ya están importados.');return}
   const records=labels.map(label=>({
    project_id:project.id,plan_id:plan.id,property_type:'Lote',code:label.code,
-   area_land_m2:label.area,status:'unknown',observations:label.observations||null,
+   area_land_m2:label.area,status:'available',observations:label.observations||null,
    geometry:{type:'Point',coordinates:[label.x,label.y]},created_by:getUser()?.id||null
   }));
   const {data,error}=await getSupabase().from('property_units').insert(records).select();

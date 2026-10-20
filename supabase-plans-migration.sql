@@ -37,7 +37,7 @@ create table if not exists public.property_units (
   floors integer check (floors is null or floors >= 0),
   bedrooms integer check (bedrooms is null or bedrooms >= 0),
   bathrooms integer check (bathrooms is null or bathrooms >= 0),
-  status text not null default 'available' check (status in ('available', 'reserved', 'sold')),
+  status text not null default 'available' check (status in ('available', 'reserved', 'sold', 'blocked')),
   price numeric check (price is null or price >= 0),
   observations text,
   geometry jsonb not null default '{"type":"Polygon","coordinates":[]}'::jsonb
@@ -48,12 +48,15 @@ create table if not exists public.property_units (
 );
 
 alter table public.property_units
-  alter column status set default 'unknown';
+  alter column status set default 'available';
+update public.property_units
+  set status = 'available'
+  where status = 'unknown';
 alter table public.property_units
   drop constraint if exists property_units_status_check;
 alter table public.property_units
   add constraint property_units_status_check
-    check (status in ('available', 'reserved', 'sold', 'blocked', 'unknown'));
+    check (status in ('available', 'reserved', 'sold', 'blocked'));
 
 create table if not exists public.property_unit_owners (
   property_id uuid primary key references public.property_units(id) on delete cascade,
