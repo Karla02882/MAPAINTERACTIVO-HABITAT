@@ -120,7 +120,10 @@ function sceneViewport(scene){
 }
 
 function isHuertasSicayaPlan(project,plan){
- return project?.id==='las-huertas-de-sicaya'&&plan?.file_name?.trim().toLocaleLowerCase('es')===HUERTAS_SICAYA_DXF.toLocaleLowerCase('es');
+ return project?.id==='las-huertas-de-sicaya'&&(
+  plan?.file_name?.trim().toLocaleLowerCase('es')===HUERTAS_SICAYA_DXF.toLocaleLowerCase('es')
+  ||plan?.source_type==='pdf'&&plan?.name?.toLocaleLowerCase('es').includes('lotizaci')
+ );
 }
 
 export function matchHuertasSicayaLots(scene){
@@ -164,6 +167,27 @@ export function matchHuertasSicayaLots(scene){
   if(complete)return HUERTAS_SICAYA_LOTS.map((lot,index)=>({lot,polygon:selected[index]}));
  }
  return[];
+}
+export function matchHuertasSicayaPdfLots(polygons){
+ const parcels=polygons.filter(polygon=>polygon.area>=5000&&polygon.area<=7000);
+ if(parcels.length!==HUERTAS_SICAYA_LOTS.length)return[];
+ const center=polygon=>polygon.points.reduce((sum,[x,y])=>[sum[0]+x/polygon.points.length,sum[1]+y/polygon.points.length],[0,0]);
+ const ordered=parcels.map(polygon=>({polygon,center:center(polygon)}));
+ const midpointY=(Math.min(...ordered.map(item=>item.center[1]))+Math.max(...ordered.map(item=>item.center[1])))/2;
+ const upper=ordered.filter(item=>item.center[1]<midpointY),lower=ordered.filter(item=>item.center[1]>=midpointY);
+ if(upper.length!==7||lower.length!==7)return[];
+ const byLotNumber=new Map();
+ for(const [block,group] of [['A',upper],['B',lower]]){
+  const byX=group.slice().sort((first,second)=>first.center[0]-second.center[0]);
+  const sideLots=byX.slice(0,2).sort((first,second)=>first.center[1]-second.center[1]);
+  const streetLots=byX.slice(2);
+  if(sideLots.length!==2||streetLots.length!==5)return[];
+  [...sideLots,...streetLots].forEach((item,index)=>byLotNumber.set(`${block}:${index+1}`,item.polygon));
+ }
+ return HUERTAS_SICAYA_LOTS.map(lot=>{
+  const polygon=byLotNumber.get(`${lot.block}:${lot.number}`);
+  return polygon?{lot,polygon}:null;
+ }).filter(Boolean);
 }
 
 export function parsePdfVectorPolygons(operatorList,viewport,pdfjs){
@@ -319,11 +343,13 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
  root.setAttribute('aria-label','Planos interactivos');
  root.innerHTML=`<header class="plans-header"><div><strong>Planos interactivos</strong><span>Selecciona una propiedad o administra su plano</span></div><button type="button" data-action="close">Volver al mapa</button></header>
  <div class="plans-toolbar"><label>Proyecto<select data-field="project"></select></label><label>Plano<select data-field="plan"></select></label><button type="button" data-action="zoom-out" aria-label="Reducir zoom">−</button><input data-field="zoom" type="range" min="0.5" max="4" step="0.1" value="1" aria-label="Zoom del plano"><button type="button" data-action="zoom-in" aria-label="Aumentar zoom">+</button><span data-role="zoom-label">100%</span></div>
- <div class="plans-layout"><aside class="plans-sidebar"><div class="plans-search"><label>Buscar propiedad<input data-field="search" type="search" placeholder="Código, manzana, torre, piso…"></label><label>Estado<select data-field="status-filter"><option value="">Todos los estados</option><option value="available">Disponible</option><option value="reserved">Reservado</option><option value="sold">Vendido</option><option value="blocked">Bloqueado</option></select></label><details class="plans-range-filters"><summary>Filtrar por precio y metraje</summary><label>Precio mínimo (S/) <input data-field="price-min" type="number" min="0" step="1000" placeholder="Sin mínimo"></label><label>Precio máximo (S/) <input data-field="price-max" type="number" min="0" step="1000" placeholder="Sin máximo"></label><label>Área mínima (m²) <input data-field="area-min" type="number" min="0" step="1" placeholder="Sin mínimo"></label><label>Área máxima (m²) <input data-field="area-max" type="number" min="0" step="1" placeholder="Sin máximo"></label></details></div><div class="plans-list" data-role="property-list"></div><div class="plans-admin-tools" data-role="admin-tools"></div></aside><div class="plans-stage"><div class="plans-stage-message" data-role="stage-message">Selecciona un proyecto y plano para comenzar.</div><div class="plans-pan" data-role="pan"><div class="plans-surface" data-role="surface"><canvas data-role="pdf-canvas"></canvas><svg data-role="plan-svg" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Plano interactivo"></svg></div></div><div class="plans-map-tools" data-role="map-tools"></div></div><aside class="plans-inspector" data-role="inspector"><h2>Ficha de propiedad</h2><p>Elige una figura del plano para consultar sus datos.</p></aside></div><p class="plans-status" role="status" aria-live="polite"></p>`;
+ <div class="plans-filter-toolbar" data-role="range-filters" aria-label="Filtros de precio y metraje"></div>
+ <p class="plans-status" role="status" aria-live="polite"></p>
+ <div class="plans-layout"><aside class="plans-sidebar"><div class="plans-search"><label>Buscar propiedad<input data-field="search" type="search" placeholder="Código, manzana, torre, piso…"></label><label>Estado<select data-field="status-filter"><option value="" selected>Todos los estados</option><option value="available">Disponible</option><option value="reserved">Reservado</option><option value="sold">Vendido</option><option value="blocked">Bloqueado</option></select></label><div data-role="block-filter-slot"></div></div><div class="plans-list" data-role="property-list"></div><div class="plans-admin-tools" data-role="admin-tools"></div></aside><div class="plans-stage"><div class="plans-stage-message" data-role="stage-message">Selecciona un proyecto y plano para comenzar.</div><div class="plans-pan" data-role="pan"><div class="plans-surface" data-role="surface"><canvas data-role="pdf-canvas"></canvas><svg data-role="plan-svg" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Plano interactivo"></svg></div></div><div class="plans-map-tools" data-role="map-tools"></div></div><aside class="plans-inspector" data-role="inspector"><h2>Ficha de propiedad</h2><p>Elige una figura del plano para consultar sus datos.</p></aside></div>`;
  document.body.append(root);
 
  const $=selector=>root.querySelector(selector);
- const state={open:false,projectId:'',planId:'',selectedPlanByProject:new Map(),projectLoadSequence:0,plans:[],units:[],selectedId:'',scene:null,zoom:1,panX:0,panY:0,drag:null,loadingPlan:false,refreshTimer:null,pdfDocument:null,quoteModes:new Map(),quoteValues:new Map()};
+ const state={open:false,projectId:'',planId:'',selectedPlanByProject:new Map(),projectLoadSequence:0,plans:[],units:[],selectedId:'',scene:null,zoom:1,panX:0,panY:0,drag:null,loadingPlan:false,refreshTimer:null,pdfDocument:null,quoteModes:new Map(),quoteValues:new Map(),statusFilter:'available',blockFilter:''};
  const statusMessage=text=>{$('.plans-status').textContent=text||''};
  const planById=()=>state.plans.find(plan=>plan.id===state.planId)||null;
  const projectById=()=>getProjects().find(project=>project.id===state.projectId)||null;
@@ -335,7 +361,7 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   const key=quoteKey(unit);
   if(!state.quoteValues.has(key)){
    const now=new Date(),date=new Date(now.getTime()-now.getTimezoneOffset()*60000).toISOString().slice(0,10);
-   state.quoteValues.set(key,{initialPercent:30,installments:18,separation:0,initialDate:date});
+   state.quoteValues.set(key,{initialPercent:null,installments:null,separation:0,initialDate:date});
   }
   return state.quoteValues.get(key);
  };
@@ -354,11 +380,19 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   $('[data-field="plan"]').onchange=()=>{
    state.planId=$('[data-field="plan"]').value;
    if(state.projectId&&state.planId)state.selectedPlanByProject.set(state.projectId,state.planId);
-   state.selectedId='';loadPlanScene();
+   state.selectedId='';state.blockFilter='';loadPlanScene();
   };
   $('[data-field="search"]').oninput=renderPropertyList;
-  $('[data-field="status-filter"]').onchange=renderPropertyList;
-  root.querySelectorAll('[data-field="price-min"],[data-field="price-max"],[data-field="area-min"],[data-field="area-max"]').forEach(input=>input.oninput=renderPropertyList);
+  $('[data-field="status-filter"]').value=state.statusFilter;
+  $('[data-field="status-filter"]').onchange=event=>{state.statusFilter=event.target.value;renderPropertyList()};
+  const rangeFilters=$('[data-role="range-filters"]');
+  rangeFilters.addEventListener('input',handleRangeInput);
+  rangeFilters.addEventListener('pointerdown',event=>{
+   const input=event.target.closest('[data-range]');
+   if(input)input.style.zIndex='4';
+  });
+  rangeFilters.addEventListener('pointerup',()=>rangeFilters.querySelectorAll('[data-range]').forEach(input=>input.style.removeProperty('z-index')));
+  rangeFilters.addEventListener('pointercancel',()=>rangeFilters.querySelectorAll('[data-range]').forEach(input=>input.style.removeProperty('z-index')));
   $('[data-field="zoom"]').oninput=()=>setZoom(Number($('[data-field="zoom"]').value));
   $('[data-action="close"]').onclick=close;
   $('[data-action="zoom-out"]').onclick=()=>setZoom(state.zoom-.2);
@@ -369,13 +403,17 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
 
  async function open(projectId=''){
   if(projectId&&getProjects().some(project=>project.id===projectId)){
+   const projectChanged=state.projectId!==projectId;
    state.projectId=projectId;
    $('[data-field="project"]').value=projectId;
    state.planId=state.selectedPlanByProject.get(projectId)||'';
+   if(projectChanged)state.blockFilter='';
   }
   state.open=true;
   root.classList.add('open');
   document.body.classList.add('plans-open');
+  $('[data-field="status-filter"]').value=state.statusFilter='available';
+  statusMessage('');
   state.refreshTimer=window.setInterval(()=>{if(state.open)refreshData(true).catch(error=>statusMessage(error.message))},30000);
   await loadProjectData();
  }
@@ -398,10 +436,16 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   if(unitResult.error)throw new Error(`No se pudieron cargar las propiedades del plano: ${unitResult.error.message}`);
   if(state.projectId!==expectedProjectId||state.projectLoadSequence!==expectedSequence)return;
   state.plans=planResult.data||[];
-  state.units=(unitResult.data||[]).map(unit=>unit.status==='unknown'?{...unit,status:'available'}:unit).sort(comparePropertyCodes);
+  const databaseUnits=(unitResult.data||[]).map(unit=>unit.status==='unknown'?{...unit,status:'available'}:unit);
+  const databaseKeys=new Set(databaseUnits.map(unit=>`${unit.plan_id}:${unit.property_type}:${unit.code}`));
+  const previews=state.units.filter(unit=>String(unit.id).startsWith('preview:')&&!databaseKeys.has(`${unit.plan_id}:${unit.property_type}:${unit.code}`));
+  state.units=[...databaseUnits,...previews].sort(comparePropertyCodes);
   renderPlanOptions();
+  renderRangeFilters();
   renderPropertyList();
   renderInspector();
+  renderSvg();
+  renderMapTools();
   if(openChangedPlan&&state.planId!==previousPlanId)await loadPlanScene();
  }
  async function loadProjectData(){
@@ -456,9 +500,9 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   try{
    if(plan.source_type==='pdf')await renderPdf(plan);
    else await renderDxf(plan);
-   if(plan.source_type==='pdf'&&getIsAdmin()){
+   if(plan.source_type==='pdf'){
     const imported=await syncPdfUnits(plan,projectById());
-    if(imported)statusMessage(`Se detectaron y sincronizaron ${imported} unidades desde el PDF.`);
+    if(imported&&getIsAdmin())statusMessage(`Se detectaron y sincronizaron ${imported} unidades desde el PDF.`);
    }
    state.loadingPlan=false;
    renderSvg();
@@ -495,6 +539,7 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   const operatorList=await page.getOperatorList();
   const vectorPolygons=parsePdfVectorPolygons(operatorList,viewport,pdfjs);
   const labels=parsePdfLotLabels(textContent,viewport,pdfjs.Util.transform,vectorPolygons);
+  const sicayaLots=isHuertasSicayaPlan(projectById(),plan)?matchHuertasSicayaPdfLots(vectorPolygons):[];
   const canvas=$('[data-role="pdf-canvas"]'),context=canvas.getContext('2d');
   const scale=Math.min(2.5,2000/Math.max(viewport.width,viewport.height));
   const rendered=page.getViewport({scale});
@@ -502,44 +547,54 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   canvas.height=Math.ceil(rendered.height);
   canvas.style.aspectRatio=`${viewport.width}/${viewport.height}`;
   await page.render({canvasContext:context,viewport:rendered}).promise;
-  state.scene={width:viewport.width,height:viewport.height,background:'pdf',polygons:vectorPolygons,labels};
+  state.scene={width:viewport.width,height:viewport.height,background:'pdf',polygons:vectorPolygons,labels,sicayaLots};
   canvas.hidden=false;
  }
  async function syncPdfUnits(plan,project){
-  if(!getIsAdmin()||!project||!state.scene?.labels?.length)return 0;
+  if(!project||!state.scene?.labels?.length)return 0;
+  const isAdmin=getIsAdmin();
   const labels=state.scene.labels.filter(label=>label.code&&label.x>=0&&label.y>=0&&label.x<=state.scene.width&&label.y<=state.scene.height);
   if(!labels.length)return 0;
-  const changed=[],records=[];
+  const changed=[],records=[],previews=[];
   for(const label of labels){
    const existing=state.units.find(unit=>unit.plan_id===plan.id&&unit.property_type===label.property_type&&unit.code===label.code);
    const geometry=label.geometry||{type:'Point',coordinates:[label.x,label.y]};
+   const officialLot=project.id==='las-huertas-de-sicaya'&&label.property_type==='Lote'
+    ?HUERTAS_SICAYA_LOTS.find(lot=>lot.number===label.number&&(!label.block||lot.block===label.block))
+    :null;
    if(!existing){
-    records.push({project_id:project.id,plan_id:plan.id,property_type:label.property_type,code:label.code,block:label.block||null,area_land_m2:label.area,status:'available',observations:label.observations||null,geometry,created_by:getUser()?.id||null});
+    const record={project_id:project.id,plan_id:plan.id,property_type:label.property_type,code:label.code,block:label.block||officialLot?.block||null,area_land_m2:officialLot?.area??label.area,status:officialLot?.status||'available',price:officialLot?.price??null,observations:label.observations||null,geometry};
+    if(isAdmin)records.push({...record,created_by:getUser()?.id||null});
+    else previews.push({...record,id:`preview:${plan.id}:${label.code}`});
     continue;
    }
    const geometryNeedsUpdate=JSON.stringify(existing.geometry)!==JSON.stringify(geometry);
    const record={};
    if(geometryNeedsUpdate)record.geometry=geometry;
-   if(existing.area_land_m2==null&&label.area!=null)record.area_land_m2=label.area;
-   if(!existing.block&&label.block)record.block=label.block;
-   if(Object.keys(record).length)changed.push({unit:existing,record});
+   if(existing.area_land_m2==null&&(officialLot?.area??label.area)!=null)record.area_land_m2=officialLot?.area??label.area;
+   if(!existing.block&&(label.block||officialLot?.block))record.block=label.block||officialLot.block;
+   if(existing.price==null&&officialLot)record.price=officialLot.price;
+   if(existing.status==null&&officialLot)record.status=officialLot.status;
+   if(isAdmin&&Object.keys(record).length)changed.push({unit:existing,record});
+   else if(!isAdmin)Object.assign(existing,record);
   }
-  const updates=await Promise.all(changed.map(async({unit,record})=>{
+  const updates=isAdmin?await Promise.all(changed.map(async({unit,record})=>{
    const {data,error}=await getSupabase().from('property_units').update(record).eq('id',unit.id).select().single();
    if(error)throw new Error(`No se pudo actualizar ${unit.code} desde el PDF: ${error.message}`);
    return data;
-  }));
+  })):[];
   let inserted=[];
-  if(records.length){
+  if(isAdmin&&records.length){
    const {data,error}=await getSupabase().from('property_units').insert(records).select();
    if(error)throw new Error(`No se pudieron guardar las unidades detectadas en el PDF: ${error.message}`);
    inserted=data||[];
   }
-  for(const unit of [...updates,...inserted]){
+  for(const unit of [...updates,...inserted,...previews]){
    state.units=state.units.filter(existing=>existing.id!==unit.id);
    state.units.push(unit);
   }
-  return updates.length+inserted.length;
+  if(updates.length||inserted.length)renderRangeFilters();
+  return updates.length+inserted.length+previews.length;
  }
  async function renderDxf(plan){
   const response=await fetch(publicPlanUrl(plan));
@@ -560,23 +615,95 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   $('[data-role="pdf-canvas"]').hidden=true;
   }
 
+ function rangeDomain(type){
+  const step=type==='price'?1000:1;
+  const values=state.units.filter(unit=>unit.project_id===state.projectId).map(unit=>type==='price'?numberValue(unit.price):propertyArea(unit)).filter(value=>value!==null&&Number.isFinite(value));
+  if(!values.length)return{min:0,max:step,step,disabled:true};
+  const min=Math.floor(Math.min(...values)/step)*step;
+  let max=Math.ceil(Math.max(...values)/step)*step;
+  if(min===max)max+=step;
+  return{min,max,step,disabled:false};
+ }
+ function formatRangeValue(type,value){
+  return type==='price'?`S/ ${Number(value).toLocaleString('es-PE')}`:`${Number(value).toLocaleString('es-PE',{maximumFractionDigits:2})} m²`;
+ }
+ function renderRangeFilters(){
+  const container=$('[data-role="range-filters"]');
+  const controls=['price','area'].map(type=>{
+   const domain=rangeDomain(type),label=type==='price'?'Precio':'Metraje',minLabel=type==='price'?'Precio mínimo':'Área mínima',maxLabel=type==='price'?'Precio máximo':'Área máxima';
+   const previousMin=container.querySelector(`[data-range="${type}-min"]`),previousMax=container.querySelector(`[data-range="${type}-max"]`);
+   let min=domain.min,max=domain.max;
+   if(previousMin&&previousMax&&!domain.disabled){
+    const wasActive=Number(previousMin.value)>Number(previousMin.min)||Number(previousMax.value)<Number(previousMax.max);
+    if(wasActive){
+     min=Math.max(domain.min,Math.min(domain.max,Number(previousMin.value)));
+     max=Math.max(min,Math.min(domain.max,Number(previousMax.value)));
+    }
+   }
+   return `<section class="plans-range-control"><strong>${label}</strong><output data-range-output="${type}" aria-live="polite">${formatRangeValue(type,min)} – ${formatRangeValue(type,max)}</output><div class="plans-range-sliders" data-range-track="${type}"><input type="range" data-range="${type}-min" min="${domain.min}" max="${domain.max}" step="${domain.step}" value="${min}" aria-label="${minLabel}" ${domain.disabled?'disabled':''}><input type="range" data-range="${type}-max" min="${domain.min}" max="${domain.max}" step="${domain.step}" value="${max}" aria-label="${maxLabel}" ${domain.disabled?'disabled':''}></div></section>`;
+  }).join('');
+  container.innerHTML=`<div class="plans-range-bar">${controls}</div>`;
+  ['price','area'].forEach(updateRangeOutput);
+ }
+ function updateRangeOutput(type){
+  const minimum=$(`[data-range="${type}-min"]`),maximum=$(`[data-range="${type}-max"]`),output=$(`[data-range-output="${type}"]`);
+  if(minimum&&maximum&&output){
+   output.textContent=`${formatRangeValue(type,minimum.value)} – ${formatRangeValue(type,maximum.value)}`;
+   const min=Number(minimum.min),max=Number(minimum.max),span=max-min||1;
+   const track=$(`[data-range-track="${type}"]`);
+   track?.style.setProperty('--range-start',`${(Number(minimum.value)-min)/span*100}%`);
+   track?.style.setProperty('--range-end',`${(Number(maximum.value)-min)/span*100}%`);
+  }
+ }
+ function handleRangeInput(event){
+  const input=event.target.closest('[data-range]');
+  if(!input)return;
+  const [type,bound]=input.dataset.range.split('-');
+  const minimum=$(`[data-range="${type}-min"]`),maximum=$(`[data-range="${type}-max"]`);
+  if(bound==='min'&&Number(minimum.value)>Number(maximum.value))minimum.value=maximum.value;
+  if(bound==='max'&&Number(maximum.value)<Number(minimum.value))maximum.value=minimum.value;
+  updateRangeOutput(type);
+  renderPropertyList();
+ }
+ function activeRange(type){
+  const domain=rangeDomain(type),minimum=$(`[data-range="${type}-min"]`),maximum=$(`[data-range="${type}-max"]`);
+  if(!minimum||!maximum)return{active:false,min:domain.min,max:domain.max};
+  const min=Number(minimum.value),max=Number(maximum.value);
+  return{active:min>domain.min||max<domain.max,min,max};
+ }
  function filteredPlanUnits(){
-  const query=$('[data-field="search"]').value.trim().toLocaleLowerCase('es'),status=$('[data-field="status-filter"]').value;
-  const priceMin=numberValue($('[data-field="price-min"]').value),priceMax=numberValue($('[data-field="price-max"]').value);
-  const areaMin=numberValue($('[data-field="area-min"]').value),areaMax=numberValue($('[data-field="area-max"]').value);
+  const query=$('[data-field="search"]').value.trim().toLocaleLowerCase('es'),status=state.statusFilter;
+  const priceRange=activeRange('price'),areaRange=activeRange('area');
   return state.units.filter(unit=>{
    if(unit.plan_id!==state.planId||(status&&unit.status!==status))return false;
+   if(state.blockFilter&&String(unit.block||'')!==state.blockFilter)return false;
    const area=propertyArea(unit),price=numberValue(unit.price);
-   if(priceMin!==null&&(price===null||price<priceMin)||priceMax!==null&&(price===null||price>priceMax))return false;
-   if(areaMin!==null&&(area===null||area<areaMin)||areaMax!==null&&(area===null||area>areaMax))return false;
+   if(priceRange.active&&(price===null||price<priceRange.min||price>priceRange.max))return false;
+   if(areaRange.active&&(area===null||area<areaRange.min||area>areaRange.max))return false;
    return !query||[
    unit.code,unit.block,unit.address,unit.location_label,unit.building,unit.tower,unit.floor_label,unit.property_type
    ].some(value=>String(value||'').toLocaleLowerCase('es').includes(query));
   }).sort(comparePropertyCodes);
  }
  function renderPropertyList(){
+  const blockSlot=$('[data-role="block-filter-slot"]');
+  const blocks=[...new Set(state.units.filter(unit=>unit.plan_id===state.planId&&unit.block).map(unit=>String(unit.block)))].sort((a,b)=>a.localeCompare(b,'es',{numeric:true}));
+  if(blocks.length){
+   const selected=blocks.includes(state.blockFilter)?state.blockFilter:'';
+   state.blockFilter=selected;
+   blockSlot.innerHTML=`<label>Manzana<select data-field="block-filter"><option value="">Todas las manzanas</option>${blocks.map(block=>`<option value="${attr(block)}" ${block===selected?'selected':''}>Manzana ${attr(block)}</option>`).join('')}</select></label>`;
+   blockSlot.querySelector('[data-field="block-filter"]').onchange=event=>{state.blockFilter=event.target.value;renderPropertyList()};
+  }else{
+   state.blockFilter='';
+   blockSlot.innerHTML='';
+  }
   const visible=filteredPlanUnits();
-  $('[data-role="property-list"]').innerHTML=visible.length?visible.map(unit=>`<button type="button" class="plan-property ${unit.id===state.selectedId?'selected':''}" data-unit-id="${attr(unit.id)}"><i style="--property-color:${propertyColor(unit.status)}"></i><span><b>${attr(unit.code)}</b><small>${attr(unit.block?`Mz. ${unit.block} · `:'')}${attr(unit.floor_label||unit.tower||unit.property_type)} · ${attr(PROPERTY_STATUS[unit.status]?.label||unit.status)}</small></span></button>`).join(''):'<p class="plans-empty">No hay propiedades que coincidan con la búsqueda.</p>';
+  const emptyMessage=state.units.some(unit=>unit.plan_id===state.planId)
+   ?'No hay propiedades que coincidan con los filtros seleccionados.'
+   :state.projectId==='las-huertas-de-sicaya'
+    ?'No hay unidades cargadas para este plano. Carga el plano PDF o DXF de lotización para asociar los 14 lotes.'
+    :'No hay unidades cargadas para este plano.';
+  $('[data-role="property-list"]').innerHTML=visible.length?visible.map(unit=>`<button type="button" class="plan-property ${unit.id===state.selectedId?'selected':''}" data-unit-id="${attr(unit.id)}"><i style="--property-color:${propertyColor(unit.status)}"></i><span><b>${attr(unit.code)}</b><small>${attr(unit.block?`Mz. ${unit.block} · `:'')}${attr(unit.floor_label||unit.tower||unit.property_type)} · ${attr(PROPERTY_STATUS[unit.status]?.label||unit.status)}</small></span></button>`).join(''):`<p class="plans-empty">${emptyMessage}</p>`;
   $('[data-role="property-list"]').querySelectorAll('[data-unit-id]').forEach(button=>button.onclick=()=>selectUnit(button.dataset.unitId));
   renderSvg();
  }
@@ -651,7 +778,7 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   state.planId='';
   state.selectedId='';
   state.scene=null;
-  renderPlanOptions();renderPropertyList();renderInspector();
+  renderPlanOptions();renderRangeFilters();renderPropertyList();renderInspector();
   await loadPlanScene();
   statusMessage(storageError?`El plano y sus propiedades se eliminaron, pero no se pudo borrar el archivo almacenado: ${storageError.message}`:'Plano y propiedades eliminados.');
  }
@@ -694,37 +821,79 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
    state.quoteModes.set(quoteKey(unit),button.dataset.quoteMode);
    renderInspector();
   }));
+  container.querySelector('[data-action="download-quote-pdf"]')?.addEventListener('click',()=>{
+   try{downloadQuotePdf(unit)}
+   catch(error){statusMessage(`No se pudo preparar el cronograma PDF: ${error.message}`)}
+  });
   renderFinanceSummary(container,unit);
  }
  function renderFinancing(unit){
   const values=quoteValues(unit),mode=state.quoteModes.get(quoteKey(unit))||'financed';
-  return `<section class="unit-financing"><div class="quote-tabs"><button type="button" data-quote-mode="cash" class="${mode==='cash'?'active':''}">Contado</button><button type="button" data-quote-mode="financed" class="${mode==='financed'?'active':''}">Financiado</button></div><div data-role="quote-content" ${mode==='cash'?'hidden':''}><p class="quote-list-price">Precio de lista <strong>${attr(formatPrice(unit.price))}</strong></p><p class="quote-note">Financiamiento referencial sin descuento ni intereses.</p><label>Inicial (%) <input data-quote-field="initialPercent" type="number" min="0" max="100" step="1" value="${attr(values.initialPercent)}"></label><p class="quote-hint">Sugerida 30%, negociable</p><label>N.º de cuotas (máximo 36) <input data-quote-field="installments" type="number" min="1" max="36" step="1" value="${attr(values.installments)}"></label><label>Fecha de pago de la inicial <input data-quote-field="initialDate" type="date" value="${attr(values.initialDate)}"></label><label>Separación (S/) <input data-quote-field="separation" type="number" min="0" max="${attr(unit.price??0)}" step="100" value="${attr(values.separation)}"></label><div class="quote-totals"><p>Inicial requerida <strong data-quote-result="initial-percent"></strong></p><p>Separación abonada <strong data-quote-result="separation"></strong></p><p>Saldo de inicial <strong data-quote-result="initial"></strong></p><p>Precio final <strong data-quote-result="final-price"></strong></p><p>Monto a financiar <strong data-quote-result="financed"></strong></p></div><p class="quote-monthly"><span data-quote-result="monthly-title"></span><strong data-quote-result="monthly"></strong></p><p class="quote-note">Cálculo referencial. Verifica las condiciones con un asesor.</p><div class="quote-schedule"><strong>Cronograma de pagos</strong><table><thead><tr><th>Cuota</th><th>Fecha</th><th>Monto</th><th>Saldo</th></tr></thead><tbody data-role="quote-schedule"></tbody></table></div></div><div data-role="quote-cash" ${mode==='cash'?'':'hidden'}><p class="quote-list-price">Precio de contado <strong>${attr(formatPrice(unit.price))}</strong></p><p class="quote-note">Pago único. Confirma el precio vigente con un asesor.</p></div></section>`;
+  return `<section class="unit-financing"><div class="quote-tabs"><button type="button" data-quote-mode="cash" class="${mode==='cash'?'active':''}">Contado</button><button type="button" data-quote-mode="financed" class="${mode==='financed'?'active':''}">Financiado</button></div><div data-role="quote-content" ${mode==='cash'?'hidden':''}><p class="quote-list-price">Precio de lista <strong>${attr(formatPrice(unit.price))}</strong></p><p class="quote-note">Financiamiento referencial sin descuento ni intereses.</p><label>Inicial (%) <input data-quote-field="initialPercent" type="number" min="0" max="100" step="1" value="${attr(values.initialPercent??'')}" placeholder="Ingresa el porcentaje"></label><p class="quote-hint">Ingresa el porcentaje acordado.</p><label>N.º de cuotas (máximo 36) <input data-quote-field="installments" type="number" min="1" max="36" step="1" value="${attr(values.installments??'')}" placeholder="Ingresa la cantidad"></label><label>Fecha de pago de la inicial <input data-quote-field="initialDate" type="date" value="${attr(values.initialDate)}"></label><label>Separación (S/) <input data-quote-field="separation" type="number" min="0" max="${attr(unit.price??0)}" step="100" value="${attr(values.separation)}"></label><div class="quote-totals"><p>Inicial requerida <strong data-quote-result="initial-percent"></strong></p><p>Separación abonada <strong data-quote-result="separation"></strong></p><p>Saldo de inicial <strong data-quote-result="initial"></strong></p><p>Precio final <strong data-quote-result="final-price"></strong></p><p>Monto a financiar <strong data-quote-result="financed"></strong></p></div><p class="quote-monthly"><span data-quote-result="monthly-title"></span><strong data-quote-result="monthly"></strong></p><p class="quote-note">Cálculo referencial. Verifica las condiciones con un asesor.</p><div class="quote-schedule"><strong>Cronograma de pagos</strong><table><thead><tr><th>Cuota</th><th>Fecha</th><th>Monto</th><th>Saldo</th></tr></thead><tbody data-role="quote-schedule"></tbody></table><button type="button" data-action="download-quote-pdf" disabled>Descargar cronograma en PDF</button></div></div><div data-role="quote-cash" ${mode==='cash'?'':'hidden'}><p class="quote-list-price">Precio de contado <strong>${attr(formatPrice(unit.price))}</strong></p><p class="quote-note">Pago único. Confirma el precio vigente con un asesor.</p></div></section>`;
  }
- function renderFinanceSummary(container,unit){
-  const values=quoteValues(unit),quote=calculateFinancing({price:unit.price,initialPercent:values.initialPercent,separation:values.separation,installments:values.installments});
-  const result=(name,value)=>{const target=container.querySelector(`[data-quote-result="${name}"]`);if(target)target.textContent=value};
-  const invalidPrice=unit.price==null||!Number.isFinite(Number(unit.price));
+ function paymentSchedule(values,quote){
   const date=new Date(`${values.initialDate||new Date().toISOString().slice(0,10)}T12:00:00`);
-  const showAmount=amount=>invalidPrice?'Consultar':formatPrice(amount);
-  result('initial',showAmount(quote.initialDue));
-  result('initial-percent',`${quote.percent}% · ${showAmount(quote.initialAmount)}`);
-  result('separation',showAmount(quote.separationAmount));
-  result('final-price',showAmount(quote.finalPrice));
-  result('financed',showAmount(quote.financedAmount));
-  result('monthly-title',`Cuota mensual (× ${quote.installmentCount})`);
-  result('monthly',showAmount(quote.monthlyAmount));
-  container.querySelector('[data-quote-field="separation"]')?.setAttribute('max',String(quote.initialAmount));
-  const schedule=container.querySelector('[data-role="quote-schedule"]');
-  if(!schedule)return;
-  const rows=[{label:'Saldo de inicial',date:values.initialDate,amount:quote.initialDue,balance:quote.financedAmount}];
+  const rows=[{label:'Saldo de inicial',date:date.toLocaleDateString('es-PE'),amount:quote.initialDue,balance:quote.financedAmount}];
   for(let index=0;index<quote.installmentCount;index++){
    const due=new Date(date),day=date.getDate();
    due.setDate(1);due.setMonth(due.getMonth()+index+1);
    due.setDate(Math.min(day,new Date(due.getFullYear(),due.getMonth()+1,0).getDate()));
    rows.push({label:`Cuota ${index+1}`,date:due.toLocaleDateString('es-PE'),amount:quote.monthlyAmount,balance:Math.max(0,quote.financedAmount-quote.monthlyAmount*(index+1))});
   }
-  schedule.innerHTML=invalidPrice?'<tr><td colspan="4">Precio pendiente de registro</td></tr>':rows.map(row=>`<tr><td>${attr(row.label)}</td><td>${attr(row.date||'')}</td><td>${attr(formatPrice(row.amount))}</td><td>${attr(formatPrice(row.balance))}</td></tr>`).join('');
-  container.querySelectorAll('[data-quote-field="installments"]').forEach(input=>input.setCustomValidity(Number(input.value)>36?'El máximo permitido es 36 cuotas.':''));
+  return rows;
+ }
+ function renderFinanceSummary(container,unit){
+  const values=quoteValues(unit),quote=calculateFinancing({price:unit.price,initialPercent:values.initialPercent,separation:values.separation,installments:values.installments});
+  const result=(name,value)=>{const target=container.querySelector(`[data-quote-result="${name}"]`);if(target)target.textContent=value};
+  const invalidPrice=unit.price==null||!Number.isFinite(Number(unit.price));
+  const hasSchedule=values.initialPercent!==null&&Number(values.initialPercent)>=0&&Number(values.initialPercent)<=100&&values.installments!==null&&Number.isInteger(Number(values.installments))&&Number(values.installments)>=1&&Number(values.installments)<=36;
+  const showAmount=amount=>invalidPrice?'Consultar':formatPrice(amount);
+  result('initial',values.initialPercent===null?'—':showAmount(quote.initialDue));
+  result('initial-percent',values.initialPercent===null?'—':`${quote.percent}% · ${showAmount(quote.initialAmount)}`);
+  result('separation',showAmount(quote.separationAmount));
+  result('final-price',showAmount(quote.finalPrice));
+  result('financed',showAmount(quote.financedAmount));
+  result('monthly-title',hasSchedule?`Cuota mensual (× ${quote.installmentCount})`:'Completa el número de cuotas');
+  result('monthly',hasSchedule?showAmount(quote.monthlyAmount):'—');
+  container.querySelector('[data-quote-field="separation"]')?.setAttribute('max',String(quote.initialAmount));
+  const schedule=container.querySelector('[data-role="quote-schedule"]');
+  if(!schedule)return;
+  const rows=hasSchedule?paymentSchedule(values,quote):[];
+  schedule.innerHTML=invalidPrice?'<tr><td colspan="4">Precio pendiente de registro</td></tr>':hasSchedule?rows.map(row=>`<tr><td>${attr(row.label)}</td><td>${attr(row.date)}</td><td>${attr(formatPrice(row.amount))}</td><td>${attr(formatPrice(row.balance))}</td></tr>`).join(''):'<tr><td colspan="4">Ingresa la inicial y el número de cuotas para calcular el cronograma.</td></tr>';
+  const downloadButton=container.querySelector('[data-action="download-quote-pdf"]');
+  if(downloadButton)downloadButton.disabled=!hasSchedule||invalidPrice;
+  container.querySelectorAll('[data-quote-field="installments"]').forEach(input=>input.setCustomValidity(input.value!==''&&(!Number.isInteger(Number(input.value))||Number(input.value)<1||Number(input.value)>36)?'Ingresa entre 1 y 36 cuotas enteras.':''));
+  container.querySelectorAll('[data-quote-field="initialPercent"]').forEach(input=>input.setCustomValidity(input.value!==''&&(Number(input.value)<0||Number(input.value)>100)?'Ingresa un porcentaje entre 0 y 100.':''));
+ }
+ function downloadQuotePdf(unit){
+  const values=quoteValues(unit),project=projectById();
+  if(!project)throw new Error('No se encontró el proyecto de la propiedad.');
+  if(values.initialPercent===null||values.installments===null||!Number.isInteger(Number(values.installments))||Number(values.installments)<1||Number(values.installments)>36)throw new Error('Completa la inicial y un número de 1 a 36 cuotas.');
+  if(unit.price==null||!Number.isFinite(Number(unit.price)))throw new Error('Registra el precio de la propiedad antes de generar el cronograma.');
+  const quote=calculateFinancing({price:unit.price,initialPercent:values.initialPercent,separation:values.separation,installments:values.installments});
+  const rows=paymentSchedule(values,quote);
+  const area=propertyArea(unit);
+  const details=[
+   ['Proyecto',project.n],
+   ['Ubicación',[project.d,project.loc].filter(Boolean).join(' · ')],
+   ['Propiedad',[unit.code,unit.property_type,unit.block?`Manzana ${unit.block}`:'',unit.tower?`Torre ${unit.tower}`:'',unit.floor_label?`Piso ${unit.floor_label}`:''].filter(Boolean).join(' · ')],
+   ['Área',area===null?'No registrada':`${area.toLocaleString('es-PE',{maximumFractionDigits:2})} m²`],
+   ['Precio de lista',formatPrice(quote.listPrice)],
+   ['Inicial',`${quote.percent}% · ${formatPrice(quote.initialAmount)}`],
+   ['Separación abonada',formatPrice(quote.separationAmount)],
+   ['Fecha de pago de la inicial',new Date(`${values.initialDate||new Date().toISOString().slice(0,10)}T12:00:00`).toLocaleDateString('es-PE')],
+   ['Monto a financiar',formatPrice(quote.financedAmount)]
+  ];
+  const title=`HABITAT INMOBILIARIA - CRONOGRAMA DE PAGOS - ${project.n} - ${unit.code}`;
+  const printWindow=window.open('','_blank');
+  if(!printWindow)throw new Error('El navegador bloqueó la ventana del cronograma. Permite ventanas emergentes e inténtalo nuevamente.');
+  printWindow.opener=null;
+  printWindow.document.open();
+  printWindow.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${attr(title)}</title><style>@page{size:A4;margin:18mm}*{box-sizing:border-box}body{font:12px Arial,sans-serif;color:#1d2b2f}h1{margin:0;color:#1d2b2f;font-size:23px}h2{margin:4px 0 20px;color:#5e6e70;font-size:14px;font-weight:500}.brand{padding-bottom:12px;border-bottom:3px solid #2f8f6b}.details{display:grid;grid-template-columns:1fr 1fr;gap:8px 20px;margin:18px 0 24px}.details p{margin:0;padding:8px 0;border-bottom:1px solid #d3d9d3}.details strong{display:block;margin-bottom:3px;color:#5e6e70;font-size:10px;text-transform:uppercase}table{width:100%;border-collapse:collapse}th,td{padding:8px 6px;border-bottom:1px solid #d3d9d3;text-align:left}th{background:#eef0ec}td:nth-child(n+3),th:nth-child(n+3){text-align:right}.note{margin-top:18px;color:#5e6e70;font-size:10px}@media print{button{display:none}}</style></head><body><div class="brand"><h1>HABITAT INMOBILIARIA</h1><h2>Cronograma de pagos</h2></div><section class="details">${details.map(([label,value])=>`<p><strong>${attr(label)}</strong>${attr(value)}</p>`).join('')}</section><table><thead><tr><th>Cuota</th><th>Fecha</th><th>Monto</th><th>Saldo</th></tr></thead><tbody>${rows.map(row=>`<tr><td>${attr(row.label)}</td><td>${attr(row.date)}</td><td>${attr(formatPrice(row.amount))}</td><td>${attr(formatPrice(row.balance))}</td></tr>`).join('')}</tbody></table><p class="note">Cálculo referencial sin intereses. Confirma las condiciones vigentes con un asesor de HABITAT INMOBILIARIA.</p></body></html>`);
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.print();
+  statusMessage('En el diálogo de impresión, elige “Guardar como PDF” para descargar el cronograma.');
  }
  function updateDraftFromForm(form){
   const data=new FormData(form),unit=selectedUnit();
@@ -756,6 +925,7 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   state.units=state.units.filter(item=>item.id!==saved.id);
   state.units.push(saved);
   state.selectedId=saved.id;
+  renderRangeFilters();
   renderPropertyList();renderSvg();renderInspector();
   renderPropertyList();
   renderInspector();
@@ -769,6 +939,7 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   if(error){statusMessage(`No se pudo eliminar la propiedad: ${error.message}`);return}
   state.units=state.units.filter(item=>item.id!==unit.id);
   state.selectedId='';
+  renderRangeFilters();
   renderPropertyList();
   renderInspector();
   renderSvg();
@@ -781,7 +952,8 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   const viewport=sceneViewport(state.scene);
   svg.setAttribute('viewBox',`${viewport.x} ${viewport.y} ${viewport.width} ${viewport.height}`);
   const dxfLabels=state.scene.background==='dxf'?state.scene.labels.filter(label=>(/^\d+$/.test(label.text)&&label.layer==='VIVIENDA')||(/^[AB]$/i.test(label.text)&&label.layer==='MANZANAS')).map(label=>`<text x="${label.position[0]}" y="${label.position[1]}" text-anchor="middle" dominant-baseline="central">${attr(label.text)}</text>`).join(''):'';
-  svg.innerHTML=`${state.scene.background==='dxf'?`<g class="dxf-background">${state.scene.paths}</g><g class="dxf-labels">${dxfLabels}</g>`:''}<g class="property-shapes">${filteredPlanUnits().map(renderPropertyShape).join('')}</g>`;
+  const visibleUnits=filteredPlanUnits();
+  svg.innerHTML=`${state.scene.background==='dxf'?`<g class="dxf-background">${state.scene.paths}</g><g class="dxf-labels">${dxfLabels}</g>`:''}<g class="property-shapes">${visibleUnits.map(renderPropertyShape).join('')}</g><g class="property-labels">${visibleUnits.map(renderPropertyLabel).join('')}</g>`;
   svg.querySelectorAll('[data-property-id]').forEach(shape=>shape.onclick=event=>{
    event.stopPropagation();
    selectUnit(shape.dataset.propertyId);
@@ -801,22 +973,31 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   if(!Array.isArray(points)||points.length<3)return'';
   const color=propertyColor(unit.status);
   const selected=unit.id===state.selectedId;
-  const labelPoint=points.reduce((sum,point)=>[sum[0]+point[0]/points.length,sum[1]+point[1]/points.length],[0,0]);
   const id=unit.id||'draft';
-  const numberLabel=unit.code.match(/^LOTE\s+(\d+)\s+MZ\s+[AB]$/i)?.[1]||unit.code;
-  const viewport=sceneViewport(state.scene);
-  const strokeWidth=Math.max(viewport.width,viewport.height)*.004;
-  const fontSize=state.scene.background==='dxf'
-   ?state.scene.viewBox?Math.min(1.2,Math.max(.55,Math.min(viewport.width,viewport.height)*.012)):Math.min(9,Math.max(5,Math.min(viewport.width,viewport.height)*.012))
-   :2.2;
-  return `<g class="plan-unit ${selected?'selected':''}" data-property-id="${attr(id)}" tabindex="0" role="button" aria-label="${attr(unit.code)} · ${attr(PROPERTY_STATUS[unit.status]?.label||unit.status)}"><polygon points="${points.map(point=>point.map(Number).join(',')).join(' ')}" fill="${color}" fill-opacity="${selected?'.65':'.35'}" stroke="${selected?'#007AFF':color}" stroke-width="${strokeWidth}" vector-effect="non-scaling-stroke"></polygon><text x="${labelPoint[0]}" y="${labelPoint[1]}" style="font-size:${fontSize}px" text-anchor="middle" dominant-baseline="middle">${attr(numberLabel)}</text></g>`;
+  return `<g class="plan-unit ${selected?'selected':''}" data-property-id="${attr(id)}" tabindex="0" role="button" aria-label="${attr(unit.code)} · ${attr(PROPERTY_STATUS[unit.status]?.label||unit.status)}"><polygon points="${points.map(point=>point.map(Number).join(',')).join(' ')}" fill="${color}" fill-opacity="${selected?'.72':'.52'}" stroke="none"></polygon></g>`;
  }
  function renderPropertyShape(unit){
   if(unit.geometry?.type==='Point'&&Array.isArray(unit.geometry.coordinates)&&unit.geometry.coordinates.length===2){
-   const [x,y]=unit.geometry.coordinates.map(Number),radius=Math.max(14,Math.max(state.scene.width,state.scene.height)*.012),selected=unit.id===state.selectedId;
-   return `<g class="plan-unit ${selected?'selected':''}" data-property-id="${attr(unit.id)}" tabindex="0" role="button" aria-label="${attr(unit.code)} · ${attr(PROPERTY_STATUS[unit.status]?.label||unit.status)}"><circle cx="${x}" cy="${y}" r="${radius}" fill="${propertyColor(unit.status)}" fill-opacity=".94" stroke="${selected?'#007AFF':'#fff'}" stroke-width="${selected?3:1.5}" vector-effect="non-scaling-stroke"><title>${attr(unit.code)}</title></circle><text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="central" style="font-size:${Math.max(12,Math.max(state.scene.width,state.scene.height)*.018)}px;fill:#fff;stroke:#17212b;stroke-width:.8px">${attr(unit.code.replace(/^LOTE\s*/i,''))}</text></g>`;
+   const [x,y]=unit.geometry.coordinates.map(Number),radius=Math.max(14,Math.max(state.scene.width,state.scene.height)*.012);
+   return `<g class="plan-unit" data-property-id="${attr(unit.id)}" tabindex="0" role="button" aria-label="${attr(unit.code)} · ${attr(PROPERTY_STATUS[unit.status]?.label||unit.status)}"><circle cx="${x}" cy="${y}" r="${radius}" fill="${propertyColor(unit.status)}" fill-opacity=".94" stroke="none"><title>${attr(unit.code)}</title></circle></g>`;
   }
   return renderPolygon(unit);
+ }
+ function renderPropertyLabel(unit){
+  const numberLabel=unit.code.match(/^LOTE\s+(\d+)/i)?.[1]||unit.code;
+  const fontSize=Math.max(12,Math.min(24,Math.max(state.scene.width,state.scene.height)*.018));
+  if(unit.geometry?.type==='Point'&&Array.isArray(unit.geometry.coordinates)&&unit.geometry.coordinates.length===2){
+   const [x,y]=unit.geometry.coordinates.map(Number),label=numberLabel;
+   return floatingUnitLabel(unit,label,x,y,fontSize,true);
+  }
+  const points=unit.geometry?.coordinates?.[0];
+  if(!Array.isArray(points)||points.length<3)return'';
+  const labelPoint=points.reduce((sum,point)=>[sum[0]+point[0]/points.length,sum[1]+point[1]/points.length],[0,0]);
+  return floatingUnitLabel(unit,numberLabel,labelPoint[0],labelPoint[1],fontSize,false);
+ }
+ function floatingUnitLabel(unit,label,x,y,fontSize,isPoint){
+  const width=Math.max(fontSize*1.8,label.length*fontSize*.68+fontSize*.8),height=fontSize*1.55;
+  return `<g class="plan-unit-label${isPoint?' point-label':''}" transform="translate(${x} ${y})" style="--unit-color:${propertyColor(unit.status)}"><rect x="${-width/2}" y="${-height/2}" width="${width}" height="${height}" rx="${height/2}"></rect><text x="0" y="0" style="font-size:${fontSize}px" text-anchor="middle" dominant-baseline="central">${attr(label)}</text></g>`;
  }
  function renderMapTools(){
   const tools=$('[data-role="map-tools"]');
@@ -843,31 +1024,54 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   const {data,error}=await getSupabase().from('property_units').insert(records).select();
   if(error){statusMessage(`No se pudieron importar los contornos: ${error.message}`);return}
   state.units.push(...data);
+  renderRangeFilters();
   renderPropertyList();renderSvg();renderMapTools();
   statusMessage(`Se importaron ${data.length} contornos. Completa los códigos, medidas oficiales y precios.`);
  }
  async function importHuertasSicayaLots(){
   const plan=planById(),project=projectById();
-  if(!getIsAdmin()||!plan||!isHuertasSicayaPlan(project,plan)||state.scene?.background!=='dxf')return;
-  const matches=matchHuertasSicayaLots(state.scene);
-  if(matches.length!==HUERTAS_SICAYA_LOTS.length){
-   throw new Error(`Se detectaron ${matches.length} de ${HUERTAS_SICAYA_LOTS.length} contornos coincidentes. Verifica que el archivo DXF corresponda a LAS HUERTAS DE SICAYA.`);
+  if(!plan||!isHuertasSicayaPlan(project,plan))return;
+  const matches=state.scene?.background==='pdf'?state.scene.sicayaLots||[]:state.scene?.background==='dxf'?matchHuertasSicayaLots(state.scene):[];
+  if(matches.length!==HUERTAS_SICAYA_LOTS.length&&getIsAdmin()){
+   throw new Error(`Se detectaron ${matches.length} de ${HUERTAS_SICAYA_LOTS.length} contornos coincidentes. Verifica que el plano de LAS HUERTAS DE SICAYA contenga las 14 parcelas.`);
   }
-  const existingCodes=new Set(state.units.filter(unit=>unit.plan_id===plan.id&&unit.property_type==='Lote').map(unit=>unit.code));
-  const records=matches.filter(({lot})=>!existingCodes.has(`LOTE ${lot.number} MZ ${lot.block}`)).map(({lot,polygon})=>({
-   project_id:project.id,plan_id:plan.id,property_type:'Lote',code:`LOTE ${lot.number} MZ ${lot.block}`,block:lot.block,
-   area_land_m2:lot.area,status:lot.status,price:lot.price,
-   geometry:{type:'Polygon',coordinates:[polygon.points]},created_by:getUser()?.id||null
-  }));
-  if(!records.length){
-   statusMessage(`Los ${matches.length} lotes oficiales de LAS HUERTAS DE SICAYA ya están importados.`);
-   return;
+  const existingByCode=new Map(state.units.filter(unit=>unit.plan_id===plan.id&&unit.property_type==='Lote').map(unit=>[unit.code,unit]));
+  const records=[],updates=[],previews=[];
+  for(const {lot,polygon} of matches){
+   const code=`LOTE ${lot.number} MZ ${lot.block}`,geometry={type:'Polygon',coordinates:[polygon.points]},existing=existingByCode.get(code);
+   if(!existing){
+    const record={project_id:project.id,plan_id:plan.id,property_type:'Lote',code,block:lot.block,area_land_m2:lot.area,status:lot.status,price:lot.price,geometry};
+    if(getIsAdmin())records.push({...record,created_by:getUser()?.id||null});
+    else previews.push({...record,id:`preview:${plan.id}:${code}`});
+    continue;
+   }
+   const record={};
+   if(JSON.stringify(existing.geometry)!==JSON.stringify(geometry))record.geometry=geometry;
+   if(existing.block!==lot.block)record.block=lot.block;
+   if(Number(existing.area_land_m2)!==lot.area)record.area_land_m2=lot.area;
+   if(existing.status!==lot.status)record.status=lot.status;
+   if(Number(existing.price)!==lot.price)record.price=lot.price;
+   if(getIsAdmin()&&Object.keys(record).length)updates.push({unit:existing,record});
+   else if(!getIsAdmin())Object.assign(existing,record,{geometry,block:lot.block,area_land_m2:lot.area,status:lot.status,price:lot.price});
   }
-  const {data,error}=await getSupabase().from('property_units').insert(records).select();
-  if(error)throw new Error(error.message);
-  state.units.push(...data);
+  const updated=getIsAdmin()?await Promise.all(updates.map(async({unit,record})=>{
+   const {data,error}=await getSupabase().from('property_units').update(record).eq('id',unit.id).select().single();
+   if(error)throw new Error(`No se pudo vincular el contorno de ${unit.code}: ${error.message}`);
+   return data;
+  })):[];
+  let inserted=[];
+  if(getIsAdmin()&&records.length){
+   const {data,error}=await getSupabase().from('property_units').insert(records).select();
+   if(error)throw new Error(error.message);
+   inserted=data||[];
+  }
+  for(const unit of [...updated,...inserted,...previews]){
+   state.units=state.units.filter(existing=>existing.id!==unit.id);
+   state.units.push(unit);
+  }
+  renderRangeFilters();
   renderPropertyList();renderInspector();renderSvg();renderMapTools();
-  statusMessage(`Se importaron ${data.length} de los 14 lotes oficiales de LAS HUERTAS DE SICAYA con sus contornos DXF, áreas, precios y estados.`);
+  if(records.length||updated.length)statusMessage(`Se sincronizaron ${records.length+updated.length} unidades de LAS HUERTAS DE SICAYA con sus contornos y manzanas.`);
  }
  async function importPdfLots(){
   const plan=planById(),project=projectById();
@@ -883,6 +1087,7 @@ export function createPlanWorkspace({getSupabase,getIsAdmin,getUser,getProjects,
   const {data,error}=await getSupabase().from('property_units').insert(records).select();
   if(error)throw new Error(error.message);
   state.units.push(...data);
+  renderRangeFilters();
   renderPropertyList();renderInspector();renderSvg();renderMapTools();
   statusMessage(`Se importaron ${data.length} lotes numerados desde el PDF. Las áreas con discrepancias quedan pendientes de validar; el estado y el precio no se inventaron.`);
  }
