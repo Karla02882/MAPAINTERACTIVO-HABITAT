@@ -1,13 +1,31 @@
 const CHANNELS=['WhatsApp','Instagram','Facebook','Correo','Urbania','TikTok','Llamada'];
 const STAGES=['Nuevo','Contactado','Visita agendada','Negociación','Cerrado'];
-const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const localDate=()=>{
  const now=new Date();
  return new Date(now.getTime()-now.getTimezoneOffset()*60000).toISOString().slice(0,10);
 };
+const DEMO_DATE=localDate();
+const DEMO_LEADS=[
+ {id:'demo-lead-andrea',name:'Ejemplo ficticio · Andrea',contact:'Contacto ficticio de prueba',channel:'WhatsApp',campaign:'Demostración',project_interest:'LAS HUERTAS DE SICAYA',budget:'Presupuesto ficticio',stage:'Nuevo',assigned_to:null,is_demo:true},
+ {id:'demo-lead-marco',name:'Ejemplo ficticio · Marco',contact:'Contacto ficticio de prueba',channel:'Instagram',campaign:'Demostración',project_interest:'JOYA VERDE',budget:'Presupuesto ficticio',stage:'Visita agendada',assigned_to:null,is_demo:true},
+ {id:'demo-lead-lucia',name:'Ejemplo ficticio · Lucía',contact:'Contacto ficticio de prueba',channel:'Correo',campaign:'Demostración',project_interest:'SAN ANTONIO',budget:'Presupuesto ficticio',stage:'Negociación',assigned_to:null,is_demo:true}
+];
+const DEMO_MESSAGES=[
+ {id:'demo-message-1',lead_id:'demo-lead-andrea',sender:'lead',body:'Mensaje ficticio: quisiera información sobre disponibilidad y áreas.',created_at:`${DEMO_DATE}T09:12:00.000Z`},
+ {id:'demo-message-2',lead_id:'demo-lead-andrea',sender:'team',body:'Respuesta de muestra: con gusto, podemos revisar las opciones disponibles.',created_at:`${DEMO_DATE}T09:15:00.000Z`},
+ {id:'demo-message-3',lead_id:'demo-lead-marco',sender:'lead',body:'Mensaje ficticio: ¿se puede coordinar una visita esta semana?',created_at:`${DEMO_DATE}T10:05:00.000Z`},
+ {id:'demo-message-4',lead_id:'demo-lead-marco',sender:'team',body:'Respuesta de muestra: indícame qué día te acomoda mejor.',created_at:`${DEMO_DATE}T10:10:00.000Z`},
+ {id:'demo-message-5',lead_id:'demo-lead-lucia',sender:'lead',body:'Mensaje ficticio: quisiera recibir información del proyecto.',created_at:`${DEMO_DATE}T11:20:00.000Z`}
+];
+const DEMO_TASKS=[
+ {id:'demo-task-1',lead_id:'demo-lead-andrea',description:'Ejemplo: compartir información del proyecto',due_date:DEMO_DATE,completed:false,is_demo:true},
+ {id:'demo-task-2',lead_id:'demo-lead-marco',description:'Ejemplo: confirmar disponibilidad para una visita',due_date:DEMO_DATE,completed:false,is_demo:true},
+ {id:'demo-task-3',lead_id:'demo-lead-lucia',description:'Ejemplo: enviar resumen de opciones',due_date:DEMO_DATE,completed:true,is_demo:true}
+];
+const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const dateLabel=value=>value?new Date(`${value}T12:00:00`).toLocaleDateString('es-PE',{day:'numeric',month:'short',year:'numeric'}):'Sin fecha';
 
-export function createCrmWorkspace({getSupabase,getIsAdmin,getUser,getProjects}){
+export function createCrmWorkspace({getSupabase,getIsStaff,getUser,getProjects}){
  const root=document.createElement('section');
  root.id='crm-workspace';
  root.setAttribute('aria-label','CRM inmobiliario');
@@ -46,6 +64,9 @@ export function createCrmWorkspace({getSupabase,getIsAdmin,getUser,getProjects})
  .crm-message{max-width:80%;padding:8px 11px;border:1px solid var(--line);border-radius:12px;background:var(--panel);font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}
  .crm-message.team{align-self:flex-end;border-color:transparent;background:color-mix(in srgb,var(--sel) 12%,var(--panel))}
  .crm-message small{display:block;margin-top:4px;color:var(--mute);font-size:10px}
+ .crm-demo-wrap{display:flex;flex:1;flex-direction:column;min-height:0}
+ .crm-demo-notice{padding:8px 12px;border-bottom:1px solid var(--line);background:color-mix(in srgb,#E5B85C 18%,var(--panel));color:var(--ink);font-size:11px;line-height:1.4}
+ .crm-demo-notice strong,.crm-demo-tag{color:#805900;font-weight:700}
  .crm-note-form{display:grid;grid-template-columns:110px minmax(0,1fr) auto;gap:6px;padding:9px;border-top:1px solid var(--line);background:var(--panel)}
  .crm-note-form button,.crm-task-form button,.crm-form button,.crm-page button{padding:8px 11px;border:0;border-radius:9px;background:var(--sel);color:var(--bg);font:inherit;font-size:11px;font-weight:600;cursor:pointer}
  .crm-detail{display:flex;flex-direction:column;gap:12px;padding:13px}
@@ -79,56 +100,62 @@ export function createCrmWorkspace({getSupabase,getIsAdmin,getUser,getProjects})
  @media(max-width:1000px){.crm-body{grid-template-columns:150px minmax(0,1fr)}.crm-inbox{grid-template-columns:minmax(190px,240px) minmax(250px,1fr)}.crm-inbox>.crm-pane:last-child{grid-column:1/-1;max-height:35vh;border-top:1px solid var(--line)}}
  @media(max-width:650px){.crm-body{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr)}.crm-nav{flex-direction:row;overflow:auto;padding:6px;border:0;border-bottom:1px solid var(--line)}.crm-brand{display:none}.crm-nav button{width:auto;flex:none;white-space:nowrap}.crm-inbox{grid-template-columns:1fr;grid-template-rows:minmax(120px,27vh) minmax(260px,1fr) auto;overflow:auto}.crm-inbox>.crm-pane:last-child{grid-column:auto;max-height:none}.crm-pane{border-right:0;border-bottom:1px solid var(--line)}.crm-thread{min-height:360px}.crm-note-form{grid-template-columns:95px minmax(0,1fr)}.crm-note-form button{grid-column:1/-1}.crm-page{padding:12px}.crm-header{padding:10px 12px}}
  </style>
- <header class="crm-header"><div><strong>CRM inmobiliario</strong><span>Gestión privada de clientes, conversaciones y seguimiento</span></div><button type="button" data-crm-action="close">Volver al mapa</button></header>
- <div class="crm-body"><nav class="crm-nav" aria-label="Secciones del CRM"><div class="crm-brand">HABITAT · CRM</div><button type="button" data-crm-view="inbox">Bandeja</button><button type="button" data-crm-view="leads">Leads</button><button type="button" data-crm-view="tasks">Seguimiento <span class="crm-count" data-crm-count="tasks">0</span></button></nav><main class="crm-main"><p class="crm-status" role="status" aria-live="polite"></p><div class="crm-content"></div></main></div>`;
+ <header class="crm-header"><div><strong>CRM inmobiliario</strong><span>Espacio compartido del equipo</span></div><button type="button" data-crm-action="close">Volver al mapa</button></header>
+ <div class="crm-body"><nav class="crm-nav" aria-label="Secciones del CRM"><div class="crm-brand">HABITAT · CRM</div><button type="button" data-crm-view="inbox">Bandeja</button><button type="button" data-crm-view="leads">Leads</button><button type="button" data-crm-view="tasks">Seguimiento <span class="crm-count" data-crm-count="tasks">0</span></button><button type="button" data-crm-view="demo">Chats de prueba</button></nav><main class="crm-main"><p class="crm-status" role="status" aria-live="polite"></p><div class="crm-content"></div></main></div>`;
  document.body.append(root);
  const $=selector=>root.querySelector(selector);
- const state={open:false,refreshTimer:null,view:'inbox',leads:[],messages:[],tasks:[],selectedId:null,channel:'Todos',stage:'Todos',owner:'all',search:'',modal:null};
+ const state={open:false,refreshTimer:null,view:'inbox',leads:[],messages:[],tasks:[],selectedId:null,demoSelectedId:DEMO_LEADS[0].id,channel:'Todos',stage:'Todos',owner:'all',search:'',modal:null};
  const projects=getProjects().map(project=>project.n).filter(Boolean);
  const currentUser=()=>getUser();
  const selectedLead=()=>state.leads.find(lead=>lead.id===state.selectedId)||null;
  const statusMessage=text=>{$('.crm-status').textContent=text||''};
  const showError=(action,error)=>statusMessage(`${action}: ${error.message||error}`);
- const leadMessages=leadId=>state.messages.filter(message=>message.lead_id===leadId);
- const leadTasks=leadId=>state.tasks.filter(task=>task.lead_id===leadId).sort((a,b)=>a.due_date.localeCompare(b.due_date));
+ const leadMessages=(leadId,isDemo=false)=>(isDemo?DEMO_MESSAGES:state.messages).filter(message=>message.lead_id===leadId);
+ const leadTasks=(leadId,isDemo=false)=>(isDemo?DEMO_TASKS:state.tasks).filter(task=>task.lead_id===leadId).sort((a,b)=>a.due_date.localeCompare(b.due_date));
  const options=(items,value,placeholder='')=>`${placeholder?`<option value="">${escapeHtml(placeholder)}</option>`:''}${items.map(item=>`<option value="${escapeHtml(item)}"${item===value?' selected':''}>${escapeHtml(item)}</option>`).join('')}`;
 
- function filteredLeads(){
+ function filteredLeads(source=state.leads){
   const userId=currentUser()?.id;
   const query=state.search.trim().toLocaleLowerCase('es');
-  return state.leads.filter(lead=>{
+  return source.filter(lead=>{
    if(state.channel!=='Todos'&&lead.channel!==state.channel)return false;
    if(state.stage!=='Todos'&&lead.stage!==state.stage)return false;
-   if(state.owner==='mine'&&lead.assigned_to!==userId)return false;
+   if(!lead.is_demo&&state.owner==='mine'&&lead.assigned_to!==userId)return false;
    return !query||[lead.name,lead.contact,lead.project_interest,lead.campaign].some(value=>String(value||'').toLocaleLowerCase('es').includes(query));
   });
  }
- function lastMessage(leadId){
-  return leadMessages(leadId).slice().sort((a,b)=>b.created_at.localeCompare(a.created_at))[0]||null;
+ function lastMessage(leadId,isDemo=false){
+  return leadMessages(leadId,isDemo).slice().sort((a,b)=>b.created_at.localeCompare(a.created_at))[0]||null;
  }
  function render(){
   if(!state.open)return;
   root.querySelectorAll('[data-crm-view]').forEach(button=>button.classList.toggle('active',button.dataset.crmView===state.view));
   $('[data-crm-count="tasks"]').textContent=String(state.tasks.filter(task=>!task.completed&&task.due_date<=localDate()).length);
   const content=$('.crm-content');
-  content.innerHTML=state.view==='inbox'?renderInbox():state.view==='leads'?renderLeads():renderTasks();
+  content.innerHTML=state.view==='inbox'?renderInbox():state.view==='demo'?renderInbox(true):state.view==='leads'?renderLeads():renderTasks();
   renderModal();
  }
- function renderInbox(){
-  const leads=filteredLeads();
-  if(!leads.some(lead=>lead.id===state.selectedId))state.selectedId=leads[0]?.id||null;
-  const current=selectedLead();
-  const left=`<section class="crm-pane"><div class="crm-filters"><input type="search" data-crm-search placeholder="Buscar lead" value="${escapeHtml(state.search)}" aria-label="Buscar lead"><select data-crm-filter="channel" aria-label="Filtrar canal">${options(['Todos',...CHANNELS],state.channel)}</select><select data-crm-filter="stage" aria-label="Filtrar etapa">${options(['Todos',...STAGES],state.stage)}</select><select data-crm-filter="owner" aria-label="Filtrar responsable"><option value="all"${state.owner==='all'?' selected':''}>Todos los leads</option><option value="mine"${state.owner==='mine'?' selected':''}>Mis leads</option></select><button class="crm-button" type="button" data-crm-action="new-lead">Registrar lead</button></div>${leads.length?leads.map(lead=>{
-   const message=lastMessage(lead.id);
-   return `<button type="button" class="crm-lead-row${lead.id===state.selectedId?' selected':''}" data-crm-select="${escapeHtml(lead.id)}"><span class="crm-avatar">${escapeHtml(lead.name.split(/\s+/).slice(0,2).map(part=>part[0]).join('').toUpperCase())}</span><span class="crm-row-content"><span class="crm-row-top"><b>${escapeHtml(lead.name)}</b><small>${message?escapeHtml(new Date(message.created_at).toLocaleDateString('es-PE')):''}</small></span><span class="crm-row-sub">${message?escapeHtml(message.body):'Sin mensajes registrados'}</span><span class="crm-tags"><span class="crm-tag">${escapeHtml(lead.channel)}</span><span class="crm-tag">${escapeHtml(lead.stage)}</span></span></span></button>`;
-  }).join(''):'<div class="crm-empty">Aún no hay leads. Registra un cliente real para comenzar.</div>'}</section>`;
-  if(!current)return `<div class="crm-inbox">${left}<section class="crm-pane"><div class="crm-empty">Selecciona un lead o registra uno nuevo.</div></section><section class="crm-pane"></section></div>`;
-  const messages=leadMessages(current.id).slice().sort((a,b)=>a.created_at.localeCompare(b.created_at));
-  const thread=`<section class="crm-pane"><div class="crm-thread"><div class="crm-thread-head"><strong>${escapeHtml(current.name)}</strong><br><small>${escapeHtml(current.channel)} · ${escapeHtml(current.contact||'Sin dato de contacto')}</small></div><div class="crm-messages">${messages.length?messages.map(message=>`<div class="crm-message ${message.sender==='team'?'team':''}">${escapeHtml(message.body)}<small>${message.sender==='team'?'Equipo':'Cliente'} · ${escapeHtml(new Date(message.created_at).toLocaleString('es-PE'))}</small></div>`).join(''):'<div class="crm-empty">No hay mensajes registrados para este lead.</div>'}</div><form class="crm-note-form" data-crm-form="message"><select name="sender" aria-label="Autor del registro"><option value="team">Equipo</option><option value="lead">Cliente</option></select><textarea name="body" rows="2" maxlength="4000" placeholder="Registra un mensaje o nota del historial…" required></textarea><button type="submit">Guardar en historial</button></form></div></section>`;
-  const tasks=leadTasks(current.id);
-  const owner=current.assigned_to===currentUser()?.id?'Tú':current.assigned_to?'Otro administrador':'Sin asignar';
-  const detail=`<section class="crm-pane"><div class="crm-detail"><label>Etapa<select data-crm-stage="${escapeHtml(current.id)}">${options(STAGES,current.stage)}</select></label><div><h3>Interés</h3><p>${escapeHtml(current.project_interest||'Por definir')}</p><small>Presupuesto: ${escapeHtml(current.budget||'Por definir')}<br>Campaña: ${escapeHtml(current.campaign||'—')}<br>Responsable: ${owner}</small><br><button type="button" class="crm-button" data-crm-action="edit-lead" data-crm-id="${escapeHtml(current.id)}" style="margin-top:7px">Editar lead</button></div><div><h3>Seguimiento</h3>${tasks.length?tasks.map(task=>`<label class="crm-task${task.completed?' done':''}"><input type="checkbox" data-crm-task="${escapeHtml(task.id)}"${task.completed?' checked':''}><span>${escapeHtml(task.description)}<small class="${!task.completed&&task.due_date<localDate()?'crm-overdue':''}">${!task.completed&&task.due_date<localDate()?'Vencida · ':''}${escapeHtml(dateLabel(task.due_date))}</small></span></label>`).join(''):'<small>Sin tareas registradas.</small>'}<form class="crm-task-form" data-crm-form="task"><input name="description" maxlength="300" placeholder="Nueva tarea de seguimiento" required><input name="due_date" type="date" value="${localDate()}" required><button type="submit">Agregar tarea</button></form></div></div></section>`;
-  return `<div class="crm-inbox">${left}${thread}${detail}</div>`;
+ function renderInbox(isDemo=false){
+  const source=isDemo?DEMO_LEADS:state.leads,selectedId=isDemo?state.demoSelectedId:state.selectedId;
+  const leads=filteredLeads(source);
+  if(!leads.some(lead=>lead.id===selectedId)){
+   if(isDemo)state.demoSelectedId=leads[0]?.id||null;
+   else state.selectedId=leads[0]?.id||null;
+  }
+  const current=leads.find(lead=>lead.id===(isDemo?state.demoSelectedId:state.selectedId))||null;
+  const demoNotice=isDemo?'<div class="crm-demo-notice"><strong>SOLO DEMOSTRACIÓN</strong> · Conversaciones y contactos inventados para probar la interfaz. No son clientes reales y no se guardan en Supabase.</div>':'';
+  const filters=`<input type="search" data-crm-search placeholder="Buscar ${isDemo?'chat de prueba':'lead'}" value="${escapeHtml(state.search)}" aria-label="Buscar ${isDemo?'chat de prueba':'lead'}"><select data-crm-filter="channel" aria-label="Filtrar canal">${options(['Todos',...CHANNELS],state.channel)}</select><select data-crm-filter="stage" aria-label="Filtrar etapa">${options(['Todos',...STAGES],state.stage)}</select>${isDemo?'':'<select data-crm-filter="owner" aria-label="Filtrar responsable"><option value="all">Todos los leads</option><option value="mine">Mis leads</option></select><button class="crm-button" type="button" data-crm-action="new-lead">Registrar lead</button>'}`;
+  const left=`<section class="crm-pane"><div class="crm-filters">${filters}</div>${leads.length?leads.map(lead=>{
+   const message=lastMessage(lead.id,isDemo);
+   return `<button type="button" class="crm-lead-row${lead.id===(isDemo?state.demoSelectedId:state.selectedId)?' selected':''}" data-crm-select="${escapeHtml(lead.id)}"${isDemo?' data-crm-demo="true"':''}><span class="crm-avatar">${escapeHtml(lead.name.split(/\s+/).slice(-1)[0][0].toUpperCase())}</span><span class="crm-row-content"><span class="crm-row-top"><b>${escapeHtml(lead.name)}</b><small>${message?escapeHtml(new Date(message.created_at).toLocaleDateString('es-PE')):''}</small></span><span class="crm-row-sub">${message?escapeHtml(message.body):'Sin mensajes registrados'}</span><span class="crm-tags"><span class="crm-tag">${escapeHtml(lead.channel)}</span><span class="crm-tag">${escapeHtml(lead.stage)}</span>${isDemo?'<span class="crm-tag crm-demo-tag">DEMO</span>':''}</span></span></button>`;
+  }).join(''):`<div class="crm-empty">${isDemo?'No hay chats de prueba que coincidan con los filtros.':'Aún no hay leads. Registra un cliente real para comenzar.'}</div>`}</section>`;
+  if(!current)return `<div class="crm-demo-wrap">${demoNotice}<div class="crm-inbox">${left}<section class="crm-pane"><div class="crm-empty">Selecciona una conversación.</div></section><section class="crm-pane"></section></div></div>`;
+  const messages=leadMessages(current.id,isDemo).slice().sort((a,b)=>a.created_at.localeCompare(b.created_at));
+  const thread=`<section class="crm-pane"><div class="crm-thread"><div class="crm-thread-head"><strong>${escapeHtml(current.name)}${isDemo?' · DEMO':''}</strong><br><small>${escapeHtml(current.channel)} · ${escapeHtml(current.contact||'Sin dato de contacto')}</small></div><div class="crm-messages">${messages.map(message=>`<div class="crm-message ${message.sender==='team'?'team':''}">${escapeHtml(message.body)}<small>${message.sender==='team'?'Equipo':'Cliente'} · ${escapeHtml(new Date(message.created_at).toLocaleString('es-PE'))}</small></div>`).join('')}</div>${isDemo?'<div class="crm-demo-notice">Chat ficticio de lectura; no envía ni guarda mensajes.</div>':`<form class="crm-note-form" data-crm-form="message"><select name="sender" aria-label="Autor del registro"><option value="team">Equipo</option><option value="lead">Cliente</option></select><textarea name="body" rows="2" maxlength="4000" placeholder="Registra un mensaje o nota del historial…" required></textarea><button type="submit">Guardar en historial</button></form>`}</div></section>`;
+  const tasks=leadTasks(current.id,isDemo);
+  const owner=current.assigned_to===currentUser()?.id?'Tú':current.assigned_to?'Otro miembro del equipo':'Sin asignar';
+  const detail=`<section class="crm-pane"><div class="crm-detail"><label>Etapa<select data-crm-stage="${escapeHtml(current.id)}"${isDemo?' disabled':''}>${options(STAGES,current.stage)}</select></label><div><h3>Interés</h3><p>${escapeHtml(current.project_interest||'Por definir')}</p><small>Presupuesto: ${escapeHtml(current.budget||'Por definir')}<br>Campaña: ${escapeHtml(current.campaign||'—')}<br>Responsable: ${owner}</small>${isDemo?'<div class="crm-demo-notice">Datos ficticios de muestra.</div>':`<br><button type="button" class="crm-button" data-crm-action="edit-lead" data-crm-id="${escapeHtml(current.id)}" style="margin-top:7px">Editar lead</button>`}</div><div><h3>Seguimiento</h3>${tasks.length?tasks.map(task=>`<label class="crm-task${task.completed?' done':''}"><input type="checkbox" data-crm-task="${escapeHtml(task.id)}"${task.completed?' checked':''}${isDemo?' disabled':''}><span>${escapeHtml(task.description)}<small>${escapeHtml(dateLabel(task.due_date))}</small></span></label>`).join(''):'<small>Sin tareas registradas.</small>'}${isDemo?'<small>Las tareas de ejemplo son solo de lectura.</small>':`<form class="crm-task-form" data-crm-form="task"><input name="description" maxlength="300" placeholder="Nueva tarea de seguimiento" required><input name="due_date" type="date" value="${localDate()}" required><button type="submit">Agregar tarea</button></form>`}</div></div></section>`;
+  return `<div class="crm-demo-wrap">${demoNotice}<div class="crm-inbox">${left}${thread}${detail}</div></div>`;
  }
  function renderLeads(){
   const leads=filteredLeads();
@@ -154,7 +181,7 @@ export function createCrmWorkspace({getSupabase,getIsAdmin,getUser,getProjects})
   else root.querySelector('.crm-content').append(overlay);
  }
  async function load(){
-  if(!getIsAdmin())throw new Error('Inicia sesión con una cuenta administradora para usar el CRM.');
+  if(!getIsStaff())throw new Error('Inicia sesión con una cuenta del equipo para usar el CRM.');
   const supabase=getSupabase();
   if(!supabase)throw new Error('Supabase no está conectado; no se puede cargar el CRM.');
   const [leadResult,messageResult,taskResult]=await Promise.all([
@@ -191,7 +218,7 @@ export function createCrmWorkspace({getSupabase,getIsAdmin,getUser,getProjects})
   statusMessage('');
  }
  async function open(){
-  if(!getIsAdmin())throw new Error('El CRM está disponible únicamente para administradores autorizados.');
+  if(!getIsStaff())throw new Error('El CRM está disponible únicamente para miembros autenticados del equipo.');
   if(!getSupabase())throw new Error('Supabase no está conectado.');
   state.open=true;
   root.classList.add('open');
@@ -200,12 +227,13 @@ export function createCrmWorkspace({getSupabase,getIsAdmin,getUser,getProjects})
    await load();
    state.refreshTimer=window.setInterval(()=>{
     if(!state.open)return;
-    if(!getIsAdmin()){close();return}
+    if(!getIsStaff()){close();return}
     if(!state.modal)perform('No se pudieron actualizar los datos del CRM',load);
    },30000);
   }catch(error){close();throw error}
  }
  async function saveLead(form){
+  if(state.modal?.id?.startsWith('demo-'))throw new Error('Los chats de prueba son ficticios y no se pueden editar.');
   const values=Object.fromEntries(new FormData(form).entries());
   const leadId=state.modal?.id;
   const user=currentUser();
@@ -234,6 +262,7 @@ export function createCrmWorkspace({getSupabase,getIsAdmin,getUser,getProjects})
   render();
  }
  async function setStage(leadId,stage){
+  if(leadId.startsWith('demo-'))throw new Error('Los chats de prueba son de solo lectura.');
   if(!STAGES.includes(stage))throw new Error('La etapa seleccionada no es válida.');
   const {data,error}=await getSupabase().from('crm_leads').update({stage,updated_at:new Date().toISOString()}).eq('id',leadId).select().single();
   if(error)throw new Error(`No se pudo actualizar la etapa: ${error.message}`);
@@ -243,6 +272,7 @@ export function createCrmWorkspace({getSupabase,getIsAdmin,getUser,getProjects})
  async function saveMessage(form){
   const lead=selectedLead();
   if(!lead)throw new Error('Selecciona un lead antes de registrar un mensaje.');
+  if(lead.id.startsWith('demo-'))throw new Error('Los chats de prueba son ficticios y no se pueden editar.');
   const values=Object.fromEntries(new FormData(form).entries());
   const body=String(values.body||'').trim();
   if(!body)throw new Error('Escribe el mensaje antes de guardarlo.');
@@ -255,6 +285,7 @@ export function createCrmWorkspace({getSupabase,getIsAdmin,getUser,getProjects})
  async function saveTask(form){
   const lead=selectedLead();
   if(!lead)throw new Error('Selecciona un lead antes de crear una tarea.');
+  if(lead.id.startsWith('demo-'))throw new Error('Los chats de prueba son ficticios y no se pueden editar.');
   const values=Object.fromEntries(new FormData(form).entries());
   const description=String(values.description||'').trim();
   if(!description)throw new Error('La descripción de la tarea es obligatoria.');
@@ -265,6 +296,7 @@ export function createCrmWorkspace({getSupabase,getIsAdmin,getUser,getProjects})
   render();
  }
  async function toggleTask(taskId,completed){
+  if(taskId.startsWith('demo-'))throw new Error('Las tareas de prueba son de solo lectura.');
   const {data,error}=await getSupabase().from('crm_tasks').update({completed}).eq('id',taskId).select().single();
   if(error)throw new Error(`No se pudo actualizar la tarea: ${error.message}`);
   state.tasks=state.tasks.map(task=>task.id===taskId?data:task);
@@ -276,7 +308,12 @@ export function createCrmWorkspace({getSupabase,getIsAdmin,getUser,getProjects})
   const viewButton=event.target.closest('[data-crm-view]');
   if(viewButton){state.view=viewButton.dataset.crmView;render();return}
   const selectButton=event.target.closest('[data-crm-select]');
-  if(selectButton){state.selectedId=selectButton.dataset.crmSelect;state.view='inbox';render();return}
+  if(selectButton){
+   if(selectButton.dataset.crmDemo)state.demoSelectedId=selectButton.dataset.crmSelect;
+   else state.selectedId=selectButton.dataset.crmSelect;
+   state.view=selectButton.dataset.crmDemo?'demo':'inbox';
+   render();return
+  }
   const actionButton=event.target.closest('[data-crm-action]');
   if(!actionButton)return;
   if(actionButton.dataset.crmAction==='new-lead'){state.modal={};renderModal()}

@@ -67,11 +67,13 @@ Para asociar el PDF adjunto a **JOYA VERDE**, aplica primero la migración, inic
 
 Para **LAS HUERTAS DE SICAYA**, selecciona el proyecto y carga el plano de lotización PDF o el archivo `Lotizacion Sicaya Las Huertas.dxf`. Al abrir un plano reconocido como administrador, se sincronizan los 14 lotes oficiales con manzana, número, área, precio y estado, y se muestran sobre sus contornos. El PDF asocia los contornos por su distribución espacial en el plano; revisa visualmente su correspondencia antes de usarla comercialmente. Las medidas calculadas del contorno no sustituyen las áreas oficiales.
 
-## CRM privado
+## CRM para el equipo
 
-El botón **CRM** solo aparece para usuarios autenticados y autorizados en `project_admins`. Para activar el módulo, ejecuta [`supabase-crm-migration.sql`](./supabase-crm-migration.sql) en el mismo proyecto Supabase después de `supabase-setup.sql`. La migración crea tablas protegidas con RLS para leads, historial manual de mensajes y tareas; no incorpora contactos de demostración. Todos los administradores autorizados pueden consultar y gestionar los registros; la pantalla se actualiza automáticamente cada 30 segundos y oculta los datos al cerrar sesión. El CRM permite registrar leads, etapa, canal, campaña, proyecto, presupuesto, mensajes del historial y tareas. Guardar un mensaje lo registra en la base de datos, pero no lo envía a WhatsApp, Instagram, correo ni otros canales.
+El botón **CRM** solicita iniciar sesión y da acceso compartido a cualquier cuenta autenticada del equipo. Invita las cuentas del personal desde Supabase Auth, mantén desactivado el registro público y no compartas credenciales: toda cuenta autenticada puede ver y gestionar los leads, mensajes y tareas. El CRM no es público para visitantes anónimos.
 
-La carga inicial de la base de datos está vacía. Agrega únicamente datos de contactos con autorización para almacenarlos. La sincronización y las políticas del CRM dependen de Supabase y de haber ejecutado la migración; los usuarios no administradores no pueden acceder a los registros.
+Ejecuta [`supabase-crm-migration.sql`](./supabase-crm-migration.sql) en el SQL Editor del mismo proyecto Supabase, después de `supabase-setup.sql`. Si ya aplicaste una versión anterior de esta migración, ejecútala de nuevo para actualizar las políticas RLS de administradores a miembros autenticados del equipo. La migración crea tablas para leads, historial manual de mensajes y tareas sin añadir clientes reales ni de demostración. El CRM se actualiza cada 30 segundos y oculta los datos al cerrar sesión.
+
+La sección **Chats de prueba** incluye conversaciones y tareas ficticias, identificadas como demostración y de solo lectura; se generan únicamente en el navegador y nunca se guardan en Supabase. En la bandeja real se crean y comparten los registros de clientes. Guardar una respuesta solo agrega una nota al historial; no la envía a WhatsApp, Instagram, correo ni otros canales. Ingresa únicamente datos de contactos autorizados para su almacenamiento.
 
 Para probarlo:
 

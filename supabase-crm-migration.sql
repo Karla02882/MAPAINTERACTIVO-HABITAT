@@ -56,60 +56,69 @@ drop policy if exists "Project admins can read CRM leads" on public.crm_leads;
 drop policy if exists "Project admins can insert CRM leads" on public.crm_leads;
 drop policy if exists "Project admins can update CRM leads" on public.crm_leads;
 drop policy if exists "Project admins can delete CRM leads" on public.crm_leads;
-create policy "Project admins can read CRM leads"
+drop policy if exists "Authenticated staff can read CRM leads" on public.crm_leads;
+drop policy if exists "Authenticated staff can insert CRM leads" on public.crm_leads;
+drop policy if exists "Authenticated staff can update CRM leads" on public.crm_leads;
+drop policy if exists "Authenticated staff can delete CRM leads" on public.crm_leads;
+create policy "Authenticated staff can read CRM leads"
   on public.crm_leads for select to authenticated
-  using ((select public.is_project_admin()))
-;
-create policy "Project admins can insert CRM leads"
+  using (true);
+create policy "Authenticated staff can insert CRM leads"
   on public.crm_leads for insert to authenticated
-  with check ((select public.is_project_admin()) and created_by = (select auth.uid()));
-create policy "Project admins can update CRM leads"
+  with check (created_by = (select auth.uid()));
+create policy "Authenticated staff can update CRM leads"
   on public.crm_leads for update to authenticated
-  using ((select public.is_project_admin()))
-  with check ((select public.is_project_admin()));
-create policy "Project admins can delete CRM leads"
+  using (true)
+  with check (true);
+create policy "Authenticated staff can delete CRM leads"
   on public.crm_leads for delete to authenticated
-  using ((select public.is_project_admin()));
+  using (true);
 
 drop policy if exists "Project admins can manage CRM messages" on public.crm_messages;
 drop policy if exists "Project admins can read CRM messages" on public.crm_messages;
 drop policy if exists "Project admins can insert CRM messages" on public.crm_messages;
 drop policy if exists "Project admins can update CRM messages" on public.crm_messages;
 drop policy if exists "Project admins can delete CRM messages" on public.crm_messages;
-create policy "Project admins can read CRM messages"
+drop policy if exists "Authenticated staff can read CRM messages" on public.crm_messages;
+drop policy if exists "Authenticated staff can insert CRM messages" on public.crm_messages;
+drop policy if exists "Authenticated staff can update CRM messages" on public.crm_messages;
+drop policy if exists "Authenticated staff can delete CRM messages" on public.crm_messages;
+create policy "Authenticated staff can read CRM messages"
   on public.crm_messages for select to authenticated
-  using ((select public.is_project_admin()))
-;
-create policy "Project admins can insert CRM messages"
+  using (true);
+create policy "Authenticated staff can insert CRM messages"
   on public.crm_messages for insert to authenticated
-  with check ((select public.is_project_admin()) and created_by = (select auth.uid()));
-create policy "Project admins can update CRM messages"
+  with check (created_by = (select auth.uid()));
+create policy "Authenticated staff can update CRM messages"
   on public.crm_messages for update to authenticated
-  using ((select public.is_project_admin()))
-  with check ((select public.is_project_admin()));
-create policy "Project admins can delete CRM messages"
+  using (true)
+  with check (true);
+create policy "Authenticated staff can delete CRM messages"
   on public.crm_messages for delete to authenticated
-  using ((select public.is_project_admin()));
+  using (true);
 
 drop policy if exists "Project admins can manage CRM tasks" on public.crm_tasks;
 drop policy if exists "Project admins can read CRM tasks" on public.crm_tasks;
 drop policy if exists "Project admins can insert CRM tasks" on public.crm_tasks;
 drop policy if exists "Project admins can update CRM tasks" on public.crm_tasks;
 drop policy if exists "Project admins can delete CRM tasks" on public.crm_tasks;
-create policy "Project admins can read CRM tasks"
+drop policy if exists "Authenticated staff can read CRM tasks" on public.crm_tasks;
+drop policy if exists "Authenticated staff can insert CRM tasks" on public.crm_tasks;
+drop policy if exists "Authenticated staff can update CRM tasks" on public.crm_tasks;
+drop policy if exists "Authenticated staff can delete CRM tasks" on public.crm_tasks;
+create policy "Authenticated staff can read CRM tasks"
   on public.crm_tasks for select to authenticated
-  using ((select public.is_project_admin()))
-;
-create policy "Project admins can insert CRM tasks"
+  using (true);
+create policy "Authenticated staff can insert CRM tasks"
   on public.crm_tasks for insert to authenticated
-  with check ((select public.is_project_admin()) and created_by = (select auth.uid()));
-create policy "Project admins can update CRM tasks"
+  with check (created_by = (select auth.uid()));
+create policy "Authenticated staff can update CRM tasks"
   on public.crm_tasks for update to authenticated
-  using ((select public.is_project_admin()))
-  with check ((select public.is_project_admin()));
-create policy "Project admins can delete CRM tasks"
+  using (true)
+  with check (true);
+create policy "Authenticated staff can delete CRM tasks"
   on public.crm_tasks for delete to authenticated
-  using ((select public.is_project_admin()));
+  using (true);
 
 grant select, insert, update, delete
   on public.crm_leads, public.crm_messages, public.crm_tasks
