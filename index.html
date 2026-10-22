@@ -258,7 +258,7 @@ body.crm-open{overflow:hidden}
 <div id="modal" role="dialog" aria-modal="true"></div>
 <script type="module">
 import{createPlanWorkspace}from'./plan-feature.js?v=20261021-1';
-import{createCrmWorkspace}from'./crm-feature.js?v=20261021-2';
+import{createCrmWorkspace}from'./crm-feature.js?v=20261021-3';
 const COL={'Ejecución':'var(--ok)','Anteproyecto':'var(--build)','Sold Out':'var(--sold)'};
 const P=[
 {n:'SAN ANTONIO',d:'Huancayo',loc:'Av. San Antonio y Av. San Carlos',a:'Desde 49 m²',pr:'S/.235,000',t:'Departamentos',s:'Ejecución',h:195},
@@ -340,7 +340,7 @@ function groupAssets(project){
 }
 function updateAccountUi(){
  const button=$('#account-button'),status=$('#account-status'),crmButton=$('#crm-button');
- crmButton.hidden=!currentUser||!isProjectAdmin;
+ crmButton.hidden=!supabase;
  if(!supabase){
   button.textContent='Sin conexión';
   button.disabled=true;
@@ -745,6 +745,9 @@ const planWorkspace=createPlanWorkspace({getSupabase:()=>supabase,getIsAdmin:()=
 $('#plans-button').onclick=()=>planWorkspace.open();
 crmWorkspace=createCrmWorkspace({getSupabase:()=>supabase,getIsAdmin:()=>isProjectAdmin,getUser:()=>currentUser,getProjects:()=>P});
 $('#crm-button').onclick=async()=>{
+ if(!supabase){setStorageMessage('Configura Supabase antes de ingresar al CRM.');return}
+ if(!currentUser){showAuthDialog();return}
+ if(!isProjectAdmin){setStorageMessage('El CRM es privado y solo está disponible para administradores autorizados.');return}
  try{await crmWorkspace.open()}
  catch(error){setStorageMessage(`No se pudo abrir el CRM: ${error.message}`)}
 };

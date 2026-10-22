@@ -162,7 +162,11 @@ export function createCrmWorkspace({getSupabase,getIsAdmin,getUser,getProjects})
    supabase.from('crm_messages').select('*').order('created_at'),
    supabase.from('crm_tasks').select('*').order('due_date')
   ]);
-  if(leadResult.error)throw new Error(`No se pudieron cargar los leads. Aplica supabase-crm-migration.sql: ${leadResult.error.message}`);
+  if(leadResult.error){
+   const missingTable=leadResult.error.code==='PGRST205'||/could not find the table .*crm_leads|crm_leads.*schema cache/i.test(leadResult.error.message);
+   if(missingTable)throw new Error('Falta crear las tablas del CRM en Supabase. En el SQL Editor del proyecto, ejecuta supabase-crm-migration.sql y vuelve a abrir CRM.');
+   throw new Error(`No se pudieron cargar los leads: ${leadResult.error.message}`);
+  }
   if(messageResult.error)throw new Error(`No se pudo cargar el historial de mensajes: ${messageResult.error.message}`);
   if(taskResult.error)throw new Error(`No se pudieron cargar las tareas: ${taskResult.error.message}`);
   state.leads=leadResult.data||[];
